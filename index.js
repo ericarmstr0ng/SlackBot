@@ -424,7 +424,7 @@ app.post("/assignproject", UrlEncoder, async (req, res) => {
 					res.end("The project " + projectName + " is still actively assigned to you for Project Health Checkup!");
 				}
 				else {
-					let currentDate = new Date().toString();
+					let currentDate = new Date().toISOString();
 					let assignQuery = "Insert into delivery_users_projects (user_id,project_id,active,date_assigned) values ('" + req.body.user_id + "', '" + projectID + "', '" + "true" + "', '"+ currentDate +"')";
 					let queryResult = await sendQuery(assignQuery);
 					if (queryResult.rowCount) {
@@ -473,8 +473,8 @@ app.post("/unassignproject", UrlEncoder, async (req, res) => {
 					res.end("The project " + projectName + " is not actively assigned to you for Project Health Checkup!");
 				}
 				else {
-					let currentDate = new Date().toString();
-					let unassignQuery = "Update delivery_users_projects set active='"+ "false" +"', date_unassigned ='"+ currentDate + "' where project_id='"+ projectID+"' and user_id='"+req.body.user_id+"';"
+					let currentDate = new Date().toISOString();
+					let unassignQuery = "Update delivery_users_projects set active='"+ "false" +"', date_unassigned ='"+ currentDate + "' where project_id='"+ projectID+"' and user_id='"+req.body.user_id+"' and active='true';"
 					let queryResult = await sendQuery(unassignQuery);
 					if (queryResult.rowCount) {
 						console.log("User " + req.body.user_id + " unassigned project " + req.body.text);
@@ -908,7 +908,7 @@ function processBlockActions(requestPayload, res) {
 //remove a project via the Survey Button
 async function removeProject(responseURL,userID,projectID,projectName) {
 	try {
-		let currentDate = new Date().toDateString();
+		let currentDate = new Date().toISOString();
 		let unassignQuery = "Update delivery_users_projects set active='"+ "false" +"', date_unassigned ='"+ currentDate + "' where project_id='"+ projectID+"' and user_id='"+userID+"';"
 		let queryResult = await sendQuery(unassignQuery);
 		if (queryResult.rowCount) {
@@ -931,7 +931,7 @@ async function updatePositiveSurvey(responseURL,userID, rating,projectID, projec
 		let d1 = new Date(0);
 		let d2 = new Date(0);
 		d1.setUTCSeconds(postedDate);
-		let insQuery = "Insert into projectsurvey (user_id,project_id,rating,posteddate) values ('" + userID + "', '"+ projectID + "', '" + rating +"', '" + d1.toString() + "')";
+		let insQuery = "Insert into projectsurvey (user_id,project_id,rating,posteddate) values ('" + userID + "', '"+ projectID + "', '" + rating +"', '" + d1.toISOString() + "')";
 		let queryResult = await sendQuery(insQuery);
 		if (queryResult.rowCount) {
 			console.log("User " + userID + " added survey with rating " + rating + " for project " + projectID);
@@ -989,7 +989,7 @@ async function processViewSubmission(requestPayload, res) {
 		let checkProjectIDQuery = "select id from projects where projectname='"+ projectName+"' and active='true'"
 		let projectIDResult = await sendQuery(checkProjectIDQuery);
 		let projectID = projectIDResult.rows[0].id
-		let insQuery = "Insert into projectsurvey (user_id,project_id,rating,comment,posteddate) values ('" + userID + "', '"+ projectID + "', '" + rating +"', '" + comments + "', '" + postedDate.toString() + "')";
+		let insQuery = "Insert into projectsurvey (user_id,project_id,rating,comment,posteddate) values ('" + userID + "', '"+ projectID + "', '" + rating +"', '" + comments + "', '" + postedDate.toISOString() + "')";
 		let queryResult = await sendQuery(insQuery);
 		if (queryResult.rowCount) {
 			console.log("User " + userID + " added survey with comment and rating " + rating + " for project " + projectID);
