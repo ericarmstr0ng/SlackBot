@@ -116,7 +116,7 @@ exports.surveyModal = {
 	],
 };
 
-exports.surveryHeader = {
+exports.surveyHeader = {
 	blocks: [
 		{
 			type: "header",

@@ -1,4 +1,5 @@
 //Importing required libraries and modules
+//******- Add note IF MONDAY DO TIMECARD
 
 require('dotenv').config({ path: "./environment.env" });
 const { Client } = require("pg"); //Library for postgresql
@@ -21,6 +22,7 @@ const webClient = new WebClient(slackBotToken);
 const fs = require("fs");
 const { close } = require("inspector");
 const DAY = 24 * 60 * 60 * 1000;
+const adminList = process.env.ADMIN_LIST;
 
 //Server will listens this port in local host or given url
 app.listen(process.env.PORT, () => {
@@ -148,6 +150,62 @@ app.post("/delivery", UrlEncoder, async (req, res) => {
 	} catch (e) {
 		console.log(e);
 		res.end("There was an error adding you to Project Health Checkup!");
+	}
+});
+
+app.post("/deliveryhealthsignupuser", UrlEncoder, async (req, res) => {
+	let getUser;
+	res.setHeader("Content-Type", "application/json");
+	let emailAddress = req.body.text;
+	console.log("User " + req.body.user_id + " attempting to sign up " + emailAddress + " with /deliveryhealthsignupuser.");
+	if(adminList.includes(req.body.user_id)) {
+		try {
+			if(emailAddress.includes("<@")) {
+				let parse = emailAddress.substring(2).split("|")[0]
+				getUser = await webClient.users.info({ user: parse });
+			}
+			else {
+				let parse = emailAddress.split("|")[1].slice(0,-1);
+				getUser = await webClient.users.lookupByEmail({ email: parse });
+			}
+			let userID = getUser.user.id;
+			let checkUserQuery = "select exists(select 1 from delivery_users where user_id = '"+ userID+"')"
+			let checkUserQueryResult = await sendQuery(checkUserQuery);
+			if(checkUserQueryResult.rows[0].exists) {
+				console.log("User " + userID + " already signed up.");
+				res.end(emailAddress + " has already signed up for Project Health Checkup!");
+			}
+			else {
+				let insQuery = "Insert into delivery_users (username,timezone,user_id,active) values ('" + getUser.user.real_name + "', '" + getUser.user.tz + "', '" + userID + "', '"+ "true" +"')";
+				let queryResult = await sendQuery(insQuery);
+				if (queryResult.rowCount) {
+					console.log("User " + userID + " signed up successfully.");
+					res.end(emailAddress + " is now signed up for Project Health Checkup!");
+					try {
+						const slackMessage = {
+							...{
+								channel: userID,
+								text: "You are now signed up for Project Health Checkup!",
+							},
+						};
+						var postQuestion = await webClient.chat.postMessage(slackMessage);
+					}
+					catch {
+						console.log("Issue sending signed up message to new user " + userID);
+					}
+				} else {
+					console.log("User " + userID + " did not sign up correctly.");
+					res.end("Unable to sign up " + emailAddress + " for Project Health Checkup! Please confirm a user with that email exists in Slack.");
+				}
+			}
+		} catch (e) {
+			console.log(e);
+			res.end("Unable to sign up " + emailAddress + " for Project Health Checkup! Please confirm a user with that email exists in Slack.");
+		}
+	}
+	else {
+			console.log("User " + req.body.user_id + " is not an admin.");
+			res.end("You do not have access to this slash command!");
 	}
 });
 
@@ -838,11 +896,11 @@ async function sendSurvey(userID) {
 			}
 			else{
 				try {
-					let surveyHeaderJson = JSON.stringify(interactiveJson.surveryHeader)
+					let surveyHeaderJson = JSON.stringify(interactiveJson.surveyHeader)
 					surveyHeaderJson = JSON.parse(surveyHeaderJson);
 					const slackMessage = {
 						...surveyHeaderJson,
-						...{ channel: channelID, text: "Project Survery Header" },
+						...{ channel: channelID, text: "Project Survey" },
 					};
 					webClient.chat.postMessage(slackMessage);
 					for(j = 0; j < projects.rowCount; j++) {
@@ -879,7 +937,7 @@ function processBlockActions(requestPayload, res) {
 	let responseURL = requestPayload.response_url;
 	let sendTime = parseFloat(requestPayload.container.message_ts);
 	let actionTime = parseFloat(requestPayload.actions[0].action_ts);
-	let closeStatus = actionTime - sendTime <= 18 * 60 * 60 * 1000;
+	let closeStatus = actionTime - sendTime <= 18 * 60 * 60;
 	if(!closeStatus) {
 		closeSurvey(responseURL, "Your response was past 18 hours. The result of this survey has not been recorded.?");
 	}
@@ -1134,9 +1192,6 @@ const startServer = async () => {
 		try {
 			let checkProjectQuery = "select exists(select 1 from projects where active='true')"
 			let checkProjectQueryResult = await sendQuery(checkProjectQuery);
-			console.log("log");
-			console.warn("warn");
-			console.error("error");
 			console.log("DBConnection success, started Project Health Checkup.")
 			break;
 		} catch (e) {
