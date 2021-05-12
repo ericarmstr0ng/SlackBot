@@ -467,14 +467,14 @@ function buildProjectList(projects) {
 // process assign project
 app.post("/assignproject", UrlEncoder, async (req, res) => {
 	res.setHeader("Content-Type", "application/json");
-	let re = /<@.+> .+/;
-	let matches = re.test(req.body.text);
+	let re = /<@.+>.+/;
+	let matches = re.test(req.body.text.trim());
 	if(matches) {
 		if(adminList.includes(req.body.user_id)) {
 			let user = req.body.text.substring(2).split("|")[0];
 			try {
-				let project = req.body.text.match(/^(\S+)\s(.*)/).slice(1)[1];
-				let userName = req.body.text.match(/^(\S+)\s(.*)/).slice(1)[0];
+				let project = req.body.text.split(">")[1].trim();
+				let userName = req.body.text.split(">")[0] + ">";
 				console.log("User " + req.body.user_id + " attempting to assign project " + project + " for user " + user + ", " + userName);
 				let checkUserQueryResult = await sendQuery("select exists(select 1 from delivery_users where user_id = '"+ user+"')");
 				if(!checkUserQueryResult.rows[0].exists) {
@@ -589,13 +589,13 @@ app.post("/assignproject", UrlEncoder, async (req, res) => {
 app.post("/unassignproject", UrlEncoder, async (req, res) => {
 	res.setHeader("Content-Type", "application/json");
 	let re = /<@.+> .+/;
-	let matches = re.test(req.body.text);
+	let matches = re.test(req.body.text.trim());
 	if(matches) {
 		if(adminList.includes(req.body.user_id)) {
 			let user = req.body.text.substring(2).split("|")[0];
 			try {
-				let project = req.body.text.match(/^(\S+)\s(.*)/).slice(1)[1];
-				let userName = req.body.text.match(/^(\S+)\s(.*)/).slice(1)[0];
+				let project = req.body.text.split(">")[1].trim();
+				let userName = req.body.text.split(">")[0] + ">";
 				console.log("User " + req.body.user_id + " attempting to unassign project " + project + " for user " + user + ", " + userName);
 				let checkUserQueryResult = await sendQuery("select exists(select 1 from delivery_users where user_id = '"+ user+"')");
 				if(!checkUserQueryResult.rows[0].exists) {
