@@ -161,7 +161,7 @@ app.post("/deliveryhealthsignupuser", UrlEncoder, async (req, res) => {
 	if(adminList.includes(req.body.user_id)) {
 		try {
 			if(emailAddress.includes("<@")) {
-				let parse = emailAddress.substring(2).split("|")[0]
+				let parse = emailAddress.substring(2).split("|")[0];
 				getUser = await webClient.users.info({ user: parse });
 			}
 			else {
@@ -293,35 +293,41 @@ app.post("/addproject", UrlEncoder, async (req, res) => {
 	try {
 		let checkUserQuery = await formatCheckUserQuery(req.body);
 		let checkUserQueryResult = await sendQuery(checkUserQuery);
-		if(!checkUserQueryResult.rows[0].exists) {
-			console.log("User " + req.body.user_id + " not signed up, cannot add project " + req.body.text);
-			res.end("You must be signed up for Project Health Checkup to run this command! Run /deliveryhealth to sign up.");
+		if( req.body.text === "") {
+			console.log("User " + req.body.user_id + " did not provide an project to add");
+			res.end("You must provide a project to add!");
 		}
 		else {
-			let projectName = req.body.text;
-			let checkProjectQuery = "select exists(select 1 from projects where projectname='"+ projectName+"')"
-			let checkProjectQueryResult = await sendQuery(checkProjectQuery);
-			if(checkProjectQueryResult.rows[0].exists) {
-				let makeActiveQuery = "Update projects set active='"+ "true" +"' where projectname='"+ projectName+"';"
-				let queryResult = await sendQuery(makeActiveQuery);
-				if (queryResult.rowCount) {
-					console.log("User " + req.body.user_id + " added project that exists, made active if it was not active. Project " + req.body.text);
-					res.end("A project with the name " + projectName + " already exists for Project Health Checkup! It's been made active if it was not active.");
-				} else {
-					console.log("User " + req.body.user_id + " issue trying to add project " + req.body.text);
-					res.end("There was an error making this project active on the project list for Project Health Checkup!");
-				}
+			if(!checkUserQueryResult.rows[0].exists) {
+				console.log("User " + req.body.user_id + " not signed up, cannot add project " + req.body.text);
+				res.end("You must be signed up for Project Health Checkup to run this command! Run /deliveryhealth to sign up.");
 			}
 			else {
+				let projectName = req.body.text;
+				let checkProjectQuery = "select exists(select 1 from projects where projectname='"+ projectName+"')"
+				let checkProjectQueryResult = await sendQuery(checkProjectQuery);
+				if(checkProjectQueryResult.rows[0].exists) {
+					let makeActiveQuery = "Update projects set active='"+ "true" +"' where projectname='"+ projectName+"';"
+					let queryResult = await sendQuery(makeActiveQuery);
+					if (queryResult.rowCount) {
+						console.log("User " + req.body.user_id + " added project that exists, made active if it was not active. Project " + req.body.text);
+						res.end("A project with the name " + projectName + " already exists for Project Health Checkup! It's been made active if it was not active.");
+					} else {
+						console.log("User " + req.body.user_id + " issue trying to add project " + req.body.text);
+						res.end("There was an error making this project active on the project list for Project Health Checkup!");
+					}
+				}
+				else {
 
-				let insQuery = "Insert into Projects (projectname,active) values ('" + projectName + "', '"+ "true" + "')";
-				let queryResult = await sendQuery(insQuery);
-				if (queryResult.rowCount) {
-					console.log("User " + req.body.user_id + " added project " + req.body.text);
-					res.end(req.body.text + " has been added to the project list for Project Health Checkup!");
-				} else {
-					console.log("User " + req.body.user_id + " did not correctly add project " + req.body.text);
-					res.end("There was an error adding this project to the project list for Project Health Checkup!");
+					let insQuery = "Insert into Projects (projectname,active) values ('" + projectName + "', '"+ "true" + "')";
+					let queryResult = await sendQuery(insQuery);
+					if (queryResult.rowCount) {
+						console.log("User " + req.body.user_id + " added project " + req.body.text);
+						res.end(req.body.text + " has been added to the project list for Project Health Checkup!");
+					} else {
+						console.log("User " + req.body.user_id + " did not correctly add project " + req.body.text);
+						res.end("There was an error adding this project to the project list for Project Health Checkup!");
+					}
 				}
 			}
 		}
@@ -336,39 +342,45 @@ app.post("/deleteproject", UrlEncoder, async (req, res) => {
 	console.log("User " + req.body.user_id + " attempting to delete project " + req.body.text);
 	res.setHeader("Content-Type", "application/json");
 	try {
-		let checkUserQuery = await formatCheckUserQuery(req.body);
-		let checkUserQueryResult = await sendQuery(checkUserQuery);
-		if(!checkUserQueryResult.rows[0].exists) {
-			console.log("User " + req.body.user_id + " not signed up, cannot delete project " + req.body.text);
-			res.end("You must be signed up for Project Health Checkup to run this command! Run /deliveryhealth to sign up.");
+		if( req.body.text === "") {
+			console.log("User " + req.body.user_id + " did not provide an project to delete");
+			res.end("You must provide a project to delete!");
 		}
 		else {
-			let projectName = req.body.text;
-			let checkProjectQuery = "select exists(select 1 from projects where projectname='"+ projectName+"' and active='true')"
-			let checkProjectQueryResult = await sendQuery(checkProjectQuery);
-			if(!checkProjectQueryResult.rows[0].exists) {
-				console.log("User " + req.body.user_id + " attempted to delete project " + req.body.text + " that does not exist.");
-				res.end("A project with the name " + projectName + " does not exist for Project Health Checkup!");
+			let checkUserQuery = await formatCheckUserQuery(req.body);
+			let checkUserQueryResult = await sendQuery(checkUserQuery);
+			if(!checkUserQueryResult.rows[0].exists) {
+				console.log("User " + req.body.user_id + " not signed up, cannot delete project " + req.body.text);
+				res.end("You must be signed up for Project Health Checkup to run this command! Run /deliveryhealth to sign up.");
 			}
 			else {
-				let checkProjectIDQuery = "select id from projects where projectname='"+ projectName+"' and active='true'"
-				let projectIDResult = await sendQuery(checkProjectIDQuery);
-				let projectID = projectIDResult.rows[0].id
-				let checkProjectAssignedQuery = "select exists(select 1 from delivery_users_projects where project_id='"+ projectID+"' and active='true')"
-				let checkProjectAssignedQueryResult = await sendQuery(checkProjectAssignedQuery);
-				if(checkProjectAssignedQueryResult.rows[0].exists) {
-					console.log("User " + req.body.user_id + " attempted to delete project " + req.body.text + " that has active users.");
-					res.end("The project " + projectName + " is still actively assigned to users for Project Health Checkup! You cannot remove a project that is still assigned to a user.");
+				let projectName = req.body.text;
+				let checkProjectQuery = "select exists(select 1 from projects where projectname='"+ projectName+"' and active='true')"
+				let checkProjectQueryResult = await sendQuery(checkProjectQuery);
+				if(!checkProjectQueryResult.rows[0].exists) {
+					console.log("User " + req.body.user_id + " attempted to delete project " + req.body.text + " that does not exist.");
+					res.end("A project with the name " + projectName + " does not exist for Project Health Checkup!");
 				}
 				else {
-					let insQuery = "Update projects set active='"+ "false" +"' where projectname='"+ projectName+"';"
-					let queryResult = await sendQuery(insQuery);
-					if (queryResult.rowCount) {
-						console.log("User " + req.body.user_id + " deleted project " + req.body.text);
-						res.end(req.body.text + " has been deleted from the project list for Project Health Checkup! It's been made inactive.");
-					} else {
-						console.log("User " + req.body.user_id + " did not correctly delete project " + req.body.text);
-						res.end("There was an error deleting this project from the project list for Project Health Checkup!");
+					let checkProjectIDQuery = "select id from projects where projectname='"+ projectName+"' and active='true'"
+					let projectIDResult = await sendQuery(checkProjectIDQuery);
+					let projectID = projectIDResult.rows[0].id
+					let checkProjectAssignedQuery = "select exists(select 1 from delivery_users_projects where project_id='"+ projectID+"' and active='true')"
+					let checkProjectAssignedQueryResult = await sendQuery(checkProjectAssignedQuery);
+					if(checkProjectAssignedQueryResult.rows[0].exists) {
+						console.log("User " + req.body.user_id + " attempted to delete project " + req.body.text + " that has active users.");
+						res.end("The project " + projectName + " is still actively assigned to users for Project Health Checkup! You cannot remove a project that is still assigned to a user.");
+					}
+					else {
+						let insQuery = "Update projects set active='"+ "false" +"' where projectname='"+ projectName+"';"
+						let queryResult = await sendQuery(insQuery);
+						if (queryResult.rowCount) {
+							console.log("User " + req.body.user_id + " deleted project " + req.body.text);
+							res.end(req.body.text + " has been deleted from the project list for Project Health Checkup! It's been made inactive.");
+						} else {
+							console.log("User " + req.body.user_id + " did not correctly delete project " + req.body.text);
+							res.end("There was an error deleting this project from the project list for Project Health Checkup!");
+						}
 					}
 				}
 			}
@@ -455,98 +467,243 @@ function buildProjectList(projects) {
 // process assign project
 app.post("/assignproject", UrlEncoder, async (req, res) => {
 	res.setHeader("Content-Type", "application/json");
-	console.log("User " + req.body.user_id + " attempting to assign project " + req.body.text);
-	try {
-		let checkUserQuery = await formatCheckUserQuery(req.body);
-		let checkUserQueryResult = await sendQuery(checkUserQuery);
-		if(!checkUserQueryResult.rows[0].exists) {
-			console.log("User " + req.body.user_id + " not signed up, cannot assign project.");
-			res.end("You must be signed up for Project Health Checkup to run this command! Run /deliveryhealth to sign up.");
-		}
-		else {
-			let projectName = req.body.text;
-			let checkProjectQuery = "select exists(select 1 from projects where projectname='"+ projectName+"' and active='true')"
-			let checkProjectQueryResult = await sendQuery(checkProjectQuery);
-			if(!checkProjectQueryResult.rows[0].exists) {
-				console.log("User " + req.body.user_id + " attempted to assign project " + req.body.text + " that does not exist / is not active.");
-				res.end("An active project with the name " + projectName + " does not exist for Project Health Checkup! Please create projects and make projects active with /deliveryhealthaddproject");
-			}
-			else {
-				let checkProjectIDQuery = "select id from projects where projectname='"+ projectName+"' and active='true'"
-				let projectIDResult = await sendQuery(checkProjectIDQuery);
-				let projectID = projectIDResult.rows[0].id
-				let checkProjectAssignedQuery = "select exists(select 1 from delivery_users_projects where project_id='"+ projectID+"' and user_id='"+req.body.user_id+"' and active='true')"
-				let checkProjectAssignedQueryResult = await sendQuery(checkProjectAssignedQuery);
-				if(checkProjectAssignedQueryResult.rows[0].exists) {
-					console.log("User " + req.body.user_id + " attempted to assign project " + req.body.text + " that is already assigned.");
-					res.end("The project " + projectName + " is still actively assigned to you for Project Health Checkup!");
+	let re = /<@.+> .+/;
+	let matches = re.test(req.body.text);
+	if(matches) {
+		if(adminList.includes(req.body.user_id)) {
+			let user = req.body.text.substring(2).split("|")[0];
+			try {
+				let project = req.body.text.match(/^(\S+)\s(.*)/).slice(1)[1];
+				let userName = req.body.text.match(/^(\S+)\s(.*)/).slice(1)[0];
+				console.log("User " + req.body.user_id + " attempting to assign project " + project + " for user " + user + ", " + userName);
+				let checkUserQueryResult = await sendQuery("select exists(select 1 from delivery_users where user_id = '"+ user+"')");
+				if(!checkUserQueryResult.rows[0].exists) {
+					console.log("User " + req.body.user_id + " not signed up.");
+					res.end("You cannot assign a project for " + userName + " because they are not signed up for Project Health Checkup! Please sign them up with the command /deliveryhealthsignupuser");
 				}
 				else {
-					let currentDate = new Date().toISOString();
-					let assignQuery = "Insert into delivery_users_projects (user_id,project_id,active,date_assigned) values ('" + req.body.user_id + "', '" + projectID + "', '" + "true" + "', '"+ currentDate +"')";
-					let queryResult = await sendQuery(assignQuery);
-					if (queryResult.rowCount) {
-						console.log("User " + req.body.user_id + " assigned project " + req.body.text);
-						res.end(req.body.text + " has been actively assigned to you for Project Health Checkup!");
-					} else {
-						console.log("User " + req.body.user_id + " did not correctly delete project " + req.body.text);
-						res.end("There was an error actively assigning this project to you for Project Health Checkup!");
+					let checkProjectQuery = "select exists(select 1 from projects where projectname='"+ project+"' and active='true')"
+					let checkProjectQueryResult = await sendQuery(checkProjectQuery);
+					if(!checkProjectQueryResult.rows[0].exists) {
+						console.log("User " + req.body.user_id + " attempted to assign project " + project + " for user " + user + " that does not exist / is not active.");
+						res.end("An active project with the name " + project + " does not exist for Project Health Checkup! Please create projects and make projects active with /deliveryhealthaddproject");
+					}
+					else {
+						let checkProjectIDQuery = "select id from projects where projectname='"+ project+"' and active='true'"
+						let projectIDResult = await sendQuery(checkProjectIDQuery);
+						let projectID = projectIDResult.rows[0].id
+						let checkProjectAssignedQuery = "select exists(select 1 from delivery_users_projects where project_id='"+ projectID+"' and user_id='"+user+"' and active='true')"
+						let checkProjectAssignedQueryResult = await sendQuery(checkProjectAssignedQuery);
+						if(checkProjectAssignedQueryResult.rows[0].exists) {
+							console.log("User " + req.body.user_id + " attempted to assign project " + project + " that is already assigned to user " + user);
+							res.end("The project " + project + " is still actively assigned to "+ userName + " for Project Health Checkup!");
+						}
+						else {
+							let currentDate = new Date().toISOString();
+							let assignQuery = "Insert into delivery_users_projects (user_id,project_id,active,date_assigned) values ('" + user + "', '" + projectID + "', '" + "true" + "', '"+ currentDate +"')";
+							let queryResult = await sendQuery(assignQuery);
+							if (queryResult.rowCount) {
+								console.log("User " + req.body.user_id + " assigned project " + project + " for user " + user);
+								res.end(project + " has been actively assigned to user " + userName + " for Project Health Checkup!");
+								
+								try {
+									getUser = await webClient.users.info({ user: req.body.user_id  });
+									const slackMessage = {
+										...{
+											channel: user,
+											text: project + " has been actively assigned to you by " + getUser.user.real_name + " for Project Health Checkup!",
+										},
+									};
+									var postQuestion = await webClient.chat.postMessage(slackMessage);
+								}
+								catch {
+									console.log("Issue sending signed up message to new user " + userID);
+								}
+								
+							} else {
+								console.log("User " + req.body.user_id + " did not correctly delete project " + req.body.text);
+								res.end("There was an error actively assigning this project to user " + userName + " for Project Health Checkup!");
+							}
+						}
+					}
+				}
+			} catch (e) {
+				console.log(e);
+				res.end("There was an error actively assigning this project on behalf of " + user + " for Project Health Checkup!");
+			}
+		}
+		else {
+			console.log("User " + req.body.user_id + " is not an admin.");
+			res.end("You do not have access to assign a project on behalf of another user!");
+		}
+	}
+	else {
+		console.log("User " + req.body.user_id + " attempting to assign project " + req.body.text);
+		try {
+			let checkUserQuery = await formatCheckUserQuery(req.body);
+			let checkUserQueryResult = await sendQuery(checkUserQuery);
+			if(!checkUserQueryResult.rows[0].exists) {
+				console.log("User " + req.body.user_id + " not signed up, cannot assign project.");
+				res.end("You must be signed up for Project Health Checkup to run this command! Run /deliveryhealth to sign up.");
+			}
+			else {
+				let projectName = req.body.text;
+				let checkProjectQuery = "select exists(select 1 from projects where projectname='"+ projectName+"' and active='true')"
+				let checkProjectQueryResult = await sendQuery(checkProjectQuery);
+				if(!checkProjectQueryResult.rows[0].exists) {
+					console.log("User " + req.body.user_id + " attempted to assign project " + req.body.text + " that does not exist / is not active.");
+					res.end("An active project with the name " + projectName + " does not exist for Project Health Checkup! Please create projects and make projects active with /deliveryhealthaddproject");
+				}
+				else {
+					let checkProjectIDQuery = "select id from projects where projectname='"+ projectName+"' and active='true'"
+					let projectIDResult = await sendQuery(checkProjectIDQuery);
+					let projectID = projectIDResult.rows[0].id
+					let checkProjectAssignedQuery = "select exists(select 1 from delivery_users_projects where project_id='"+ projectID+"' and user_id='"+req.body.user_id+"' and active='true')"
+					let checkProjectAssignedQueryResult = await sendQuery(checkProjectAssignedQuery);
+					if(checkProjectAssignedQueryResult.rows[0].exists) {
+						console.log("User " + req.body.user_id + " attempted to assign project " + req.body.text + " that is already assigned.");
+						res.end("The project " + projectName + " is still actively assigned to you for Project Health Checkup!");
+					}
+					else {
+						let currentDate = new Date().toISOString();
+						let assignQuery = "Insert into delivery_users_projects (user_id,project_id,active,date_assigned) values ('" + req.body.user_id + "', '" + projectID + "', '" + "true" + "', '"+ currentDate +"')";
+						let queryResult = await sendQuery(assignQuery);
+						if (queryResult.rowCount) {
+							console.log("User " + req.body.user_id + " assigned project " + req.body.text);
+							res.end(req.body.text + " has been actively assigned to you for Project Health Checkup!");
+						} else {
+							console.log("User " + req.body.user_id + " did not correctly assign project " + req.body.text);
+							res.end("There was an error actively assigning this project to you for Project Health Checkup!");
+						}
 					}
 				}
 			}
+		} catch (e) {
+			console.log(e);
+			res.end("There was an error actively assigning this project to you for Project Health Checkup!");
 		}
-	} catch (e) {
-		console.log(e);
-		res.end("There was an error actively assigning this project to you for Project Health Checkup!");
 	}
 });
 
 //process unassign project
 app.post("/unassignproject", UrlEncoder, async (req, res) => {
 	res.setHeader("Content-Type", "application/json");
-	console.log("User " + req.body.user_id + " attempting to unassign project " + req.body.text);
-	try {
-		let checkUserQuery = await formatCheckUserQuery(req.body);
-		let checkUserQueryResult = await sendQuery(checkUserQuery);
-		if(!checkUserQueryResult.rows[0].exists) {
-			console.log("User " + req.body.user_id + " not signed up, cannot unassign project.");
-			res.end("You must be signed up for Project Health Checkup to run this command! Run /deliveryhealth to sign up.");
-		}
-		else {
-			let projectName = req.body.text;
-			let checkProjectQuery = "select exists(select 1 from projects where projectname='"+ projectName+"')"
-			let checkProjectQueryResult = await sendQuery(checkProjectQuery);
-			if(!checkProjectQueryResult.rows[0].exists) {
-				console.log("User " + req.body.user_id + " attempted to unassign project " + req.body.text + " that does not exist.");
-				res.end("A project with the name " + projectName + " does not exist for Project Health Checkup!");
-			}
-			else {
-				let checkProjectIDQuery = "select id from projects where projectname='"+ projectName+"'"
-				let projectIDResult = await sendQuery(checkProjectIDQuery);
-				let projectID = projectIDResult.rows[0].id
-				let checkProjectAssignedQuery = "select exists(select 1 from delivery_users_projects where project_id='"+ projectID+"' and user_id='"+req.body.user_id+"' and active='true')"
-				let checkProjectAssignedQueryResult = await sendQuery(checkProjectAssignedQuery);
-				if(!checkProjectAssignedQueryResult.rows[0].exists) {
-					console.log("User " + req.body.user_id + " unattempted to assign project " + req.body.text + " that is not already assigned.");
-					res.end("The project " + projectName + " is not actively assigned to you for Project Health Checkup!");
+	let re = /<@.+> .+/;
+	let matches = re.test(req.body.text);
+	if(matches) {
+		if(adminList.includes(req.body.user_id)) {
+			let user = req.body.text.substring(2).split("|")[0];
+			try {
+				let project = req.body.text.match(/^(\S+)\s(.*)/).slice(1)[1];
+				let userName = req.body.text.match(/^(\S+)\s(.*)/).slice(1)[0];
+				console.log("User " + req.body.user_id + " attempting to unassign project " + project + " for user " + user + ", " + userName);
+				let checkUserQueryResult = await sendQuery("select exists(select 1 from delivery_users where user_id = '"+ user+"')");
+				if(!checkUserQueryResult.rows[0].exists) {
+					console.log("User " + req.body.user_id + " not signed up.");
+					res.end("You cannot unassign a project for " + userName + " because they are not signed up for Project Health Checkup! Please sign them up with the command /deliveryhealthsignupuser");
 				}
 				else {
-					let currentDate = new Date().toISOString();
-					let unassignQuery = "Update delivery_users_projects set active='"+ "false" +"', date_unassigned ='"+ currentDate + "' where project_id='"+ projectID+"' and user_id='"+req.body.user_id+"' and active='true';"
-					let queryResult = await sendQuery(unassignQuery);
-					if (queryResult.rowCount) {
-						console.log("User " + req.body.user_id + " unassigned project " + req.body.text);
-						res.end(req.body.text + " has been unassigned from you for Project Health Checkup!");
-					} else {
-						console.log("User " + req.body.user_id + " did not correctly delete project " + req.body.text);
-						res.end("There was an error unassigning this project from you for Project Health Checkup!");
+					let checkProjectQuery = "select exists(select 1 from projects where projectname='"+ project+"' and active='true')"
+					let checkProjectQueryResult = await sendQuery(checkProjectQuery);
+					if(!checkProjectQueryResult.rows[0].exists) {
+						console.log("User " + req.body.user_id + " attempted to assign project " + project + " for user " + user + " that does not exist / is not active.");
+						res.end("A  project with the name " + project + " does not exist for Project Health Checkup!");
+					}
+					else {
+						let checkProjectIDQuery = "select id from projects where projectname='"+ project+"' and active='true'"
+						let projectIDResult = await sendQuery(checkProjectIDQuery);
+						let projectID = projectIDResult.rows[0].id
+						let checkProjectAssignedQuery = "select exists(select 1 from delivery_users_projects where project_id='"+ projectID+"' and user_id='"+user+"' and active='true')"
+						let checkProjectAssignedQueryResult = await sendQuery(checkProjectAssignedQuery);
+
+						if(!checkProjectAssignedQueryResult.rows[0].exists) {
+							console.log("User " + req.body.user_id + " attempted to unassign project " + project + " that is not already assigned to user " + user);
+							res.end("The project " + project + " is not actively assigned to " + userName + " for Project Health Checkup!");
+						}
+						
+						else {
+							let currentDate = new Date().toISOString();
+							let unassignQuery = "Update delivery_users_projects set active='"+ "false" +"', date_unassigned ='"+ currentDate + "' where project_id='"+ projectID+"' and user_id='"+user+"' and active='true';"
+							let queryResult = await sendQuery(unassignQuery);
+							if (queryResult.rowCount) {
+								console.log("User " + req.body.user_id + " unassigned project " + project + " for user " + user);
+								res.end(project + " has been unassigned for user " + userName + " for Project Health Checkup!");
+								try {
+									getUser = await webClient.users.info({ user: req.body.user_id  });
+									const slackMessage = {
+										...{
+											channel: user,
+											text: project + " has been unassigned for you by " + getUser.user.real_name + " for Project Health Checkup!",
+										},
+									};
+									var postQuestion = await webClient.chat.postMessage(slackMessage);
+								}
+								catch {
+									console.log("Issue sending unassigned message to new user " + userID);
+								}
+								
+							} else {
+								console.log("User " + req.body.user_id + " did not correctly unassign project " + req.body.text);
+								res.end("There was an error unassigning this project to user " + userName + " for Project Health Checkup!");
+							}
+						}
+					}
+				}
+			} catch (e) {
+				console.log(e);
+				res.end("There was an error unassigning this project on behalf of " + user + " for Project Health Checkup!");
+			}
+		}
+		else {
+			console.log("User " + req.body.user_id + " is not an admin.");
+			res.end("You do not have access to unassign a project on behalf of another user!");
+		}
+	}
+	else {
+		console.log("User " + req.body.user_id + " attempting to unassign project " + req.body.text);
+		try {
+			let checkUserQuery = await formatCheckUserQuery(req.body);
+			let checkUserQueryResult = await sendQuery(checkUserQuery);
+			if(!checkUserQueryResult.rows[0].exists) {
+				console.log("User " + req.body.user_id + " not signed up, cannot unassign project.");
+				res.end("You must be signed up for Project Health Checkup to run this command! Run /deliveryhealth to sign up.");
+			}
+			else {
+				let projectName = req.body.text;
+				let checkProjectQuery = "select exists(select 1 from projects where projectname='"+ projectName+"')"
+				let checkProjectQueryResult = await sendQuery(checkProjectQuery);
+				if(!checkProjectQueryResult.rows[0].exists) {
+					console.log("User " + req.body.user_id + " attempted to unassign project " + req.body.text + " that does not exist.");
+					res.end("A project with the name " + projectName + " does not exist for Project Health Checkup!");
+				}
+				else {
+					let checkProjectIDQuery = "select id from projects where projectname='"+ projectName+"'"
+					let projectIDResult = await sendQuery(checkProjectIDQuery);
+					let projectID = projectIDResult.rows[0].id
+					let checkProjectAssignedQuery = "select exists(select 1 from delivery_users_projects where project_id='"+ projectID+"' and user_id='"+req.body.user_id+"' and active='true')"
+					let checkProjectAssignedQueryResult = await sendQuery(checkProjectAssignedQuery);
+					if(!checkProjectAssignedQueryResult.rows[0].exists) {
+						console.log("User " + req.body.user_id + " attempted to unassign project " + req.body.text + " that is not already assigned.");
+						res.end("The project " + projectName + " is not actively assigned to you for Project Health Checkup!");
+					}
+					else {
+						let currentDate = new Date().toISOString();
+						let unassignQuery = "Update delivery_users_projects set active='"+ "false" +"', date_unassigned ='"+ currentDate + "' where project_id='"+ projectID+"' and user_id='"+req.body.user_id+"' and active='true';"
+						let queryResult = await sendQuery(unassignQuery);
+						if (queryResult.rowCount) {
+							console.log("User " + req.body.user_id + " unassigned project " + req.body.text);
+							res.end(req.body.text + " has been unassigned from you for Project Health Checkup!");
+						} else {
+							console.log("User " + req.body.user_id + " did not correctly delete project " + req.body.text);
+							res.end("There was an error unassigning this project from you for Project Health Checkup!");
+						}
 					}
 				}
 			}
+		} catch (e) {
+			console.log(e);
+			res.end("There was an error unassigning this project to you for Project Health Checkup!");
 		}
-	} catch (e) {
-		console.log(e);
-		res.end("There was an error unassigning this project to you for Project Health Checkup!");
 	}
 });
 
