@@ -1204,7 +1204,10 @@ async function processViewSubmission(requestPayload, res) {
 		let checkProjectIDQuery = "select id from projects where projectname='"+ projectName+"' and active='true'"
 		let projectIDResult = await sendQuery(checkProjectIDQuery);
 		let projectID = projectIDResult.rows[0].id
-		let insQuery = "Insert into projectsurvey (user_id,project_id,rating,comment,posteddate) values ('" + userID + "', '"+ projectID + "', '" + rating +"', '" + comments + "', '" + postedDate.toISOString() + "')";
+		const insQuery = {
+			text: "Insert into projectsurvey (user_id,project_id,rating,comment,posteddate) values($1,$2,$3,$4,$5)",
+			values: [userID,projectID,rating,comments,postedDate.toISOString()],
+		}
 		let queryResult = await sendQuery(insQuery);
 		if (queryResult.rowCount) {
 			console.log("User " + userID + " added survey with comment and rating " + rating + " for project " + projectID);
@@ -1264,6 +1267,25 @@ app.post("/option/slack/actions", UrlEncoder, async (req, res) => {
 
 
 // ******************************** START AND SCHEDULE USERS **************************
+
+// Date Pickers
+app.post("/deliveryTest", UrlEncoder, async (req, res) => {
+	res.setHeader("Content-Type", "application/json");
+	let checkUserQuery = await formatCheckUserQuery(req.body);
+	let checkUserQueryResult = await sendQuery(checkUserQuery);
+	if(!checkUserQueryResult.rows[0].exists) {
+		res.end("You must be signed up for Project Health Checkup to run this command! Run /deliveryhealth to sign up.");
+	}
+	else {
+		let userID = [{ user_id: req.body.user_id }];
+		try {
+			sendSurvey(userID);
+			res.end();
+		} catch (e) {
+			console.log(e);
+		}
+	}
+});
 
 // Get local time
 async function getLocalHour(timezone) {
