@@ -169,14 +169,20 @@ app.post("/deliveryhealthsignupuser", UrlEncoder, async (req, res) => {
 				getUser = await webClient.users.lookupByEmail({ email: parse });
 			}
 			let userID = getUser.user.id;
-			let checkUserQuery = "select exists(select 1 from delivery_users where user_id = '"+ userID+"')"
+			let checkUserQuery = {
+				text: "SELECT EXISTS(SELECT 1 FROM delivery_users WHERE user_id =$1)",
+				values: [userID],
+			};
 			let checkUserQueryResult = await sendQuery(checkUserQuery);
 			if(checkUserQueryResult.rows[0].exists) {
 				console.log("User " + userID + " already signed up.");
 				res.end(emailAddress + " has already signed up for Project Health Checkup!");
 			}
 			else {
-				let insQuery = "Insert into delivery_users (username,timezone,user_id,active) values ('" + getUser.user.real_name + "', '" + getUser.user.tz + "', '" + userID + "', '"+ "true" +"')";
+				let insQuery = {
+					text: "INSERT INTO delivery_users (username,timezone,user_id,active) VALUES ($1,$2,$3,'true')",
+					values: [getUser.user.real_name, getUser.user.tz, userID],
+				};
 				let queryResult = await sendQuery(insQuery);
 				if (queryResult.rowCount) {
 					console.log("User " + userID + " signed up successfully.");
@@ -264,16 +270,21 @@ async function formatInsertUserQuery(requestPayload) {
 
 	console.log("Attempt to sign up user " + userName + ", " + userId + ", with timeZone " + timeZone);
 
-	let insQuery =
-		"Insert into delivery_users (username,timezone,user_id,active) values ('" + userName + "', '" + timeZone + "', '" + userId + "', '"+ "true" +"')";
+	let insQuery = {
+		text: "INSERT INTO delivery_users (username,timezone,user_id,active) VALUES ($1, $2, $3,'true')",
+		values: [userName, timeZone, userId],
+	};
 	return insQuery;
 }
 
 // Format query to get users
 async function formatCheckUserQuery(requestPayload) {
 	let userID = requestPayload.user_id;
-	let insQuery =
-		"select exists(select 1 from delivery_users where user_id = '"+ userID+"')"
+	let insQuery = {
+		text: "SELECT EXISTS(SELECT 1 FROM delivery_users WHERE user_id=$1)",
+		values: [userID],
+	};
+		
 	return insQuery;
 }
 
@@ -304,10 +315,16 @@ app.post("/addproject", UrlEncoder, async (req, res) => {
 			}
 			else {
 				let projectName = req.body.text;
-				let checkProjectQuery = "select exists(select 1 from projects where projectname='"+ projectName+"')"
+				let checkProjectQuery = {
+					text: "SELECT EXISTS(SELECT 1 FROM projects WHERE projectname=$1)",
+					values: [projectName],
+				};
 				let checkProjectQueryResult = await sendQuery(checkProjectQuery);
 				if(checkProjectQueryResult.rows[0].exists) {
-					let makeActiveQuery = "Update projects set active='"+ "true" +"' where projectname='"+ projectName+"';"
+					let makeActiveQuery = {
+						text: "UPDATE projects SET active='true' WHERE projectname=$1;",
+						values: [projectName],
+					};
 					let queryResult = await sendQuery(makeActiveQuery);
 					if (queryResult.rowCount) {
 						console.log("User " + req.body.user_id + " added project that exists, made active if it was not active. Project " + req.body.text);
@@ -319,7 +336,10 @@ app.post("/addproject", UrlEncoder, async (req, res) => {
 				}
 				else {
 
-					let insQuery = "Insert into Projects (projectname,active) values ('" + projectName + "', '"+ "true" + "')";
+					let insQuery = {
+						text: "INSERT INTO Projects (projectname,active) VALUES ($1,'true')",
+						values: [projectName],
+					};
 					let queryResult = await sendQuery(insQuery);
 					if (queryResult.rowCount) {
 						console.log("User " + req.body.user_id + " added project " + req.body.text);
@@ -355,17 +375,26 @@ app.post("/deleteproject", UrlEncoder, async (req, res) => {
 			}
 			else {
 				let projectName = req.body.text;
-				let checkProjectQuery = "select exists(select 1 from projects where projectname='"+ projectName+"' and active='true')"
+				let checkProjectQuery = {
+					text: "SELECT EXISTS(SELECT 1 FROM projects WHERE projectname=$1 AND active='true')",
+					values: [projectName],
+				};
 				let checkProjectQueryResult = await sendQuery(checkProjectQuery);
 				if(!checkProjectQueryResult.rows[0].exists) {
 					console.log("User " + req.body.user_id + " attempted to delete project " + req.body.text + " that does not exist.");
 					res.end("A project with the name " + projectName + " does not exist for Project Health Checkup!");
 				}
 				else {
-					let checkProjectIDQuery = "select id from projects where projectname='"+ projectName+"' and active='true'"
+					let checkProjectIDQuery = {
+						text: "SELECT id FROM projects WHERE projectname=$1 AND active='true'",
+						values: [projectName],
+					};
 					let projectIDResult = await sendQuery(checkProjectIDQuery);
 					let projectID = projectIDResult.rows[0].id
-					let checkProjectAssignedQuery = "select exists(select 1 from delivery_users_projects where project_id='"+ projectID+"' and active='true')"
+					let checkProjectAssignedQuery = {
+						text: "SELECT EXISTS(SELECT 1 FROM delivery_users_projects WHERE project_id=$1 AND active='true')",
+						values: [projectID],
+					};
 					let checkProjectAssignedQueryResult = await sendQuery(checkProjectAssignedQuery);
 					if(checkProjectAssignedQueryResult.rows[0].exists) {
 						console.log("User " + req.body.user_id + " attempted to delete project " + req.body.text + " that has active users.");
@@ -403,7 +432,7 @@ app.post("/displayprojects", UrlEncoder, async (req, res) => {
 			res.end("You must be signed up for Project Health Checkup to run this command! Run /deliveryhealth to sign up.");
 		}
 		else {
-			let checkProjectQuery = "select exists(select 1 from projects where active='true')"
+			let checkProjectQuery = "SELECT EXISTS(SELECT 1 FROM projects WHERE active='true')";
 			let checkProjectQueryResult = await sendQuery(checkProjectQuery);
 			if(!checkProjectQueryResult.rows[0].exists) {
 				console.log("User " + req.body.user_id + " cannot display projects, no actve projects exists");
@@ -476,23 +505,36 @@ app.post("/assignproject", UrlEncoder, async (req, res) => {
 				let project = req.body.text.split(">")[1].trim();
 				let userName = req.body.text.split(">")[0] + ">";
 				console.log("User " + req.body.user_id + " attempting to assign project " + project + " for user " + user + ", " + userName);
-				let checkUserQueryResult = await sendQuery("select exists(select 1 from delivery_users where user_id = '"+ user+"')");
+				let checkUserQuery = {
+					text: "SELECT EXISTS(SELECT 1 FROM delivery_users WHERE user_id =$1)",
+					values: [user],
+				};
+				let checkUserQueryResult = await sendQuery(checkUserQuery);
 				if(!checkUserQueryResult.rows[0].exists) {
 					console.log("User " + req.body.user_id + " not signed up.");
 					res.end("You cannot assign a project for " + userName + " because they are not signed up for Project Health Checkup! Please sign them up with the command /deliveryhealthsignupuser");
 				}
 				else {
-					let checkProjectQuery = "select exists(select 1 from projects where projectname='"+ project+"' and active='true')"
+					let checkProjectQuery = {
+						text: "SELECT EXISTS(SELECT 1 FROM projects WHERE projectname=$1 AND active='true')",
+						values: [project],
+					};
 					let checkProjectQueryResult = await sendQuery(checkProjectQuery);
 					if(!checkProjectQueryResult.rows[0].exists) {
 						console.log("User " + req.body.user_id + " attempted to assign project " + project + " for user " + user + " that does not exist / is not active.");
 						res.end("An active project with the name " + project + " does not exist for Project Health Checkup! Please create projects and make projects active with /deliveryhealthaddproject");
 					}
 					else {
-						let checkProjectIDQuery = "select id from projects where projectname='"+ project+"' and active='true'"
+						let checkProjectIDQuery = {
+							text: "SELECT id FROM projects WHERE projectname=$1 AND active='true'",
+							values: [project],
+						};
 						let projectIDResult = await sendQuery(checkProjectIDQuery);
 						let projectID = projectIDResult.rows[0].id
-						let checkProjectAssignedQuery = "select exists(select 1 from delivery_users_projects where project_id='"+ projectID+"' and user_id='"+user+"' and active='true')"
+						let checkProjectAssignedQuery = {
+							text: "SELECT EXISTS(SELECT 1 FROM delivery_users_projects WHERE project_id=$1 AND user_id=$2 AND active='true')",
+							values: [projectID, user],
+						};
 						let checkProjectAssignedQueryResult = await sendQuery(checkProjectAssignedQuery);
 						if(checkProjectAssignedQueryResult.rows[0].exists) {
 							console.log("User " + req.body.user_id + " attempted to assign project " + project + " that is already assigned to user " + user);
@@ -500,7 +542,10 @@ app.post("/assignproject", UrlEncoder, async (req, res) => {
 						}
 						else {
 							let currentDate = new Date().toISOString();
-							let assignQuery = "Insert into delivery_users_projects (user_id,project_id,active,date_assigned) values ('" + user + "', '" + projectID + "', '" + "true" + "', '"+ currentDate +"')";
+							let assignQuery = {
+								text: "INSERT INTO delivery_users_projects (user_id,project_id,active,date_assigned) VALUES ($1, $2, 'true', $3)",
+								values: [user, projectID, currentDate],
+							};
 							let queryResult = await sendQuery(assignQuery);
 							if (queryResult.rowCount) {
 								console.log("User " + req.body.user_id + " assigned project " + project + " for user " + user);
@@ -548,17 +593,26 @@ app.post("/assignproject", UrlEncoder, async (req, res) => {
 			}
 			else {
 				let projectName = req.body.text;
-				let checkProjectQuery = "select exists(select 1 from projects where projectname='"+ projectName+"' and active='true')"
+				let checkProjectQuery = {
+					text: "SELECT EXISTS(SELECT 1 FROM projects WHERE projectname=$1 AND active='true')",
+					values: [projectName],
+				};
 				let checkProjectQueryResult = await sendQuery(checkProjectQuery);
 				if(!checkProjectQueryResult.rows[0].exists) {
 					console.log("User " + req.body.user_id + " attempted to assign project " + req.body.text + " that does not exist / is not active.");
 					res.end("An active project with the name " + projectName + " does not exist for Project Health Checkup! Please create projects and make projects active with /deliveryhealthaddproject");
 				}
 				else {
-					let checkProjectIDQuery = "select id from projects where projectname='"+ projectName+"' and active='true'"
+					let checkProjectIDQuery = {
+						text: "SELECT id FROM projects WHERE projectname=$1 AND active='true'",
+						values: [projectName],
+					};
 					let projectIDResult = await sendQuery(checkProjectIDQuery);
 					let projectID = projectIDResult.rows[0].id
-					let checkProjectAssignedQuery = "select exists(select 1 from delivery_users_projects where project_id='"+ projectID+"' and user_id='"+req.body.user_id+"' and active='true')"
+					let checkProjectAssignedQuery = {
+						text: "SELECT EXISTS(SELECT 1 FROM delivery_users_projects WHERE project_id=$1 AND user_id=$2 AND active='true')",
+						values: [projectID, req.body.user_id],
+					};
 					let checkProjectAssignedQueryResult = await sendQuery(checkProjectAssignedQuery);
 					if(checkProjectAssignedQueryResult.rows[0].exists) {
 						console.log("User " + req.body.user_id + " attempted to assign project " + req.body.text + " that is already assigned.");
@@ -597,23 +651,36 @@ app.post("/unassignproject", UrlEncoder, async (req, res) => {
 				let project = req.body.text.split(">")[1].trim();
 				let userName = req.body.text.split(">")[0] + ">";
 				console.log("User " + req.body.user_id + " attempting to unassign project " + project + " for user " + user + ", " + userName);
-				let checkUserQueryResult = await sendQuery("select exists(select 1 from delivery_users where user_id = '"+ user+"')");
+				let checkUserQuery = {
+					text: "SELECT EXISTS(SELECT 1 FROM delivery_users WHERE user_id = $1)",
+					values: [user],
+				};
+				let checkUserQueryResult = await sendQuery(checkUserQuery);
 				if(!checkUserQueryResult.rows[0].exists) {
 					console.log("User " + req.body.user_id + " not signed up.");
 					res.end("You cannot unassign a project for " + userName + " because they are not signed up for Project Health Checkup! Please sign them up with the command /deliveryhealthsignupuser");
 				}
 				else {
-					let checkProjectQuery = "select exists(select 1 from projects where projectname='"+ project+"' and active='true')"
+					let checkProjectQuery = {
+						text: "SELECT EXISTS(SELECT 1 FROM projects WHERE projectname=$1 AND active='true')",
+						values: [project],
+					};
 					let checkProjectQueryResult = await sendQuery(checkProjectQuery);
 					if(!checkProjectQueryResult.rows[0].exists) {
 						console.log("User " + req.body.user_id + " attempted to assign project " + project + " for user " + user + " that does not exist / is not active.");
 						res.end("A  project with the name " + project + " does not exist for Project Health Checkup!");
 					}
 					else {
-						let checkProjectIDQuery = "select id from projects where projectname='"+ project+"' and active='true'"
+						let checkProjectIDQuery = {
+							text: "SELECT id FROM projects WHERE projectname=$1 AND active='true'",
+							values: [project],
+						};
 						let projectIDResult = await sendQuery(checkProjectIDQuery);
 						let projectID = projectIDResult.rows[0].id
-						let checkProjectAssignedQuery = "select exists(select 1 from delivery_users_projects where project_id='"+ projectID+"' and user_id='"+user+"' and active='true')"
+						let checkProjectAssignedQuery = {
+							text: "SELECT EXISTS(SELECT 1 FROM delivery_users_projects WHERE project_id=$1 AND user_id=$2 AND active='true')",
+							values: [projectID, user],
+						};
 						let checkProjectAssignedQueryResult = await sendQuery(checkProjectAssignedQuery);
 
 						if(!checkProjectAssignedQueryResult.rows[0].exists) {
@@ -623,7 +690,10 @@ app.post("/unassignproject", UrlEncoder, async (req, res) => {
 						
 						else {
 							let currentDate = new Date().toISOString();
-							let unassignQuery = "Update delivery_users_projects set active='"+ "false" +"', date_unassigned ='"+ currentDate + "' where project_id='"+ projectID+"' and user_id='"+user+"' and active='true';"
+							let unassignQuery = {
+								text: "UPDATE delivery_users_projects SET active='false', date_unassigned =$1 WHERE project_id=$2 AND user_id=$3 AND active='true';",
+								values: [currentDate, projectID, user],
+							};
 							let queryResult = await sendQuery(unassignQuery);
 							if (queryResult.rowCount) {
 								console.log("User " + req.body.user_id + " unassigned project " + project + " for user " + user);
@@ -670,17 +740,26 @@ app.post("/unassignproject", UrlEncoder, async (req, res) => {
 			}
 			else {
 				let projectName = req.body.text;
-				let checkProjectQuery = "select exists(select 1 from projects where projectname='"+ projectName+"')"
+				let checkProjectQuery = {
+					text: "SELECT EXISTS(SELECT 1 FROM projects WHERE projectname=$1)",
+					values: [projectName],
+				};
 				let checkProjectQueryResult = await sendQuery(checkProjectQuery);
 				if(!checkProjectQueryResult.rows[0].exists) {
 					console.log("User " + req.body.user_id + " attempted to unassign project " + req.body.text + " that does not exist.");
 					res.end("A project with the name " + projectName + " does not exist for Project Health Checkup!");
 				}
 				else {
-					let checkProjectIDQuery = "select id from projects where projectname='"+ projectName+"'"
+					let checkProjectIDQuery = {
+						text: "SELECT id FROM projects WHERE projectname=$1",
+						values: [projectName],
+					};
 					let projectIDResult = await sendQuery(checkProjectIDQuery);
 					let projectID = projectIDResult.rows[0].id
-					let checkProjectAssignedQuery = "select exists(select 1 from delivery_users_projects where project_id='"+ projectID+"' and user_id='"+req.body.user_id+"' and active='true')"
+					let checkProjectAssignedQuery = {
+						text: "SELECT EXISTS(SELECT 1 FROM delivery_users_projects WHERE project_id=$1 AND user_id=$2 AND active='true')",
+						values: [projectID, req.body.user_id],
+					};
 					let checkProjectAssignedQueryResult = await sendQuery(checkProjectAssignedQuery);
 					if(!checkProjectAssignedQueryResult.rows[0].exists) {
 						console.log("User " + req.body.user_id + " attempted to unassign project " + req.body.text + " that is not already assigned.");
@@ -688,7 +767,10 @@ app.post("/unassignproject", UrlEncoder, async (req, res) => {
 					}
 					else {
 						let currentDate = new Date().toISOString();
-						let unassignQuery = "Update delivery_users_projects set active='"+ "false" +"', date_unassigned ='"+ currentDate + "' where project_id='"+ projectID+"' and user_id='"+req.body.user_id+"' and active='true';"
+						let unassignQuery = {
+							text: "UPDATE delivery_users_projects SET active='false', date_unassigned =$1 WHERE project_id=$2 AND user_id=$3 AND active='true';",
+							values: [currentDate, projectID, req.body.user_id],
+						};
 						let queryResult = await sendQuery(unassignQuery);
 						if (queryResult.rowCount) {
 							console.log("User " + req.body.user_id + " unassigned project " + req.body.text);
@@ -730,14 +812,14 @@ app.post("/deliveryhealthusers", UrlEncoder, async (req, res) => {
 			res.end("You must be signed up for Project Health Checkup to run this command! Run /deliveryhealth to sign up.");
 		}
 		else {
-			let checkUsersQuery = "select exists(select 1 from delivery_users where active='true')"
+			let checkUsersQuery = "SELECT EXISTS(SELECT 1 FROM delivery_users WHERE active='true')";
 			let checkUsersQueryResult = await sendQuery(checkUsersQuery);
 			if(!checkUsersQueryResult.rows[0].exists) {
 				console.log("User " + req.body.user_id + " cannot display users, no actve users exists")
 				res.end("There are no active users for Project Health Checkup!");
 			}
 			else {
-				let insQuery = "SELECT * FROM delivery_users where active='true';";
+				let insQuery = "SELECT * FROM delivery_users WHERE active='true';";
 				let userID = req.body.user_id;
 				let queryResult = await sendQuery(insQuery);
 				let userList = JSON.stringify(buildUserList(queryResult.rows));
@@ -783,17 +865,26 @@ app.post("/deliveryhealthusersonproject", UrlEncoder, async (req, res) => {
 			res.end("You must be signed up for Project Health Checkup to run this command! Run /deliveryhealth to sign up.");
 		}
 		else {
-			let checkProjectQuery = "select exists(select 1 from projects where projectname='"+ projectName+"')"
+			let checkProjectQuery = {
+				text: "SELECT EXISTS(SELECT 1 FROM projects WHERE projectname=$1)",
+				values: [projectName],
+			};
 			let checkProjectQueryResult = await sendQuery(checkProjectQuery);
 			if(!checkProjectQueryResult.rows[0].exists) {
 				console.log("User " + req.body.user_id + " attempted to lookup users on a project " + req.body.text + " that does not exist.");
 				res.end("A project with the name " + projectName + " does not exist for Project Health Checkup!");
 			}
 			else {
-				let checkProjectIDQuery = "select id from projects where projectname='"+ projectName+"'"
+				let checkProjectIDQuery = {
+					text: "SELECT id FROM projects WHERE projectname=$1",
+					values: [projectName],
+				};
 				let projectIDResult = await sendQuery(checkProjectIDQuery);
 				let projectID = projectIDResult.rows[0].id
-				let getUsersOnProjectQuery = "select * from delivery_users_projects inner join delivery_users using(user_id) where project_id='"+ projectID+"' and delivery_users.active = 'true' and delivery_users_projects.active='true'"
+				let getUsersOnProjectQuery = {
+					text: "SELECT * FROM delivery_users_projects INNER JOIN delivery_users USING(user_id) WHERE project_id=$1 AND delivery_users.active = 'true' AND delivery_users_projects.active='true'",
+					values: [projectID],
+				};
 				let checkGetUsersOnProjectQuery = await sendQuery(getUsersOnProjectQuery);
 				if(checkGetUsersOnProjectQuery.rowCount <= 0) {
 					const slackMessage = {
@@ -961,17 +1052,26 @@ app.post("/deliveryhealthsurveylist", UrlEncoder, async (req, res) => {
 			res.end("You must be signed up for Project Health Checkup to run this command! Run /deliveryhealth to sign up.");
 		}
 		else {
-			let checkProjectQuery = "select exists(select 1 from projects where projectname='"+ projectName+"')"
+			let checkProjectQuery = {
+				text: "SELECT EXISTS(SELECT 1 FROM projects WHERE projectname=$1)",
+				values: [projectName],
+			};
 			let checkProjectQueryResult = await sendQuery(checkProjectQuery);
 			if(!checkProjectQueryResult.rows[0].exists) {
 				console.log("User " + req.body.user_id + " attempted to lookup surveys on a project " + req.body.text + " that does not exist.");
 				res.end("A project with the name " + projectName + " does not exist for Project Health Checkup!");
 			}
 			else {
-				let checkProjectIDQuery = "select id from projects where projectname='"+ projectName+"'"
+				let checkProjectIDQuery = {
+					text: "SELECT id FROM projects WHERE projectname=$1",
+					values: [projectName],
+				};
 				let projectIDResult = await sendQuery(checkProjectIDQuery);
 				let projectID = projectIDResult.rows[0].id
-				let getSurveyProjectQuery = "select * from projectsurvey inner join delivery_users on delivery_users.user_id = projectsurvey.user_id where project_id='"+ projectID+"' order by id desc limit 10";
+				let getSurveyProjectQuery = {
+					text: "SELECT * FROM projectsurvey INNER JOIN delivery_users ON delivery_users.user_id = projectsurvey.user_id WHERE project_id=$1 order by id desc limit 10",
+					values: [projectID],
+				};
 				let checkgetSurveyProjectQuery = await sendQuery(getSurveyProjectQuery);
 				if(checkgetSurveyProjectQuery.rowCount <= 0) {
 					const slackMessage = {
@@ -1042,7 +1142,11 @@ async function sendSurvey(userID) {
 	for (i = 0; i < userID.length; i++) {
 		try {
 			let channelID = userID[i]["user_id"];
-			let query = "SELECT * FROM delivery_users_projects WHERE user_ID = '" + channelID + "' and active='true';";
+			let query = {
+				text: "SELECT * FROM delivery_users_projects WHERE user_ID=$1 AND active='true'",
+				values: [channelID],
+			};
+
 			let projects = await sendQuery(query);
 			if (projects.rowCount <= 0) {
 				console.log("No project survey notification for " + channelID);
@@ -1062,7 +1166,10 @@ async function sendSurvey(userID) {
 					webClient.chat.postMessage(slackMessage);
 					for(j = 0; j < projects.rowCount; j++) {
 						projectID = projects.rows[j].project_id;
-						let checkProjectNameQuery = "select projectname from projects where id='"+ projectID+"' and active='true'"
+						let checkProjectNameQuery = {
+							text: "SELECT projectname FROM projects WHERE id=$1 AND active='true'",
+							values: [projectID],
+						};
 						let projectNameResult = await sendQuery(checkProjectNameQuery);
 						let projectName = projectNameResult.rows[0].projectname
 						console.log("Sending project survey notification to " + channelID + " for project " + projectName + " projectid: " + projectID);
@@ -1124,7 +1231,10 @@ function processBlockActions(requestPayload, res) {
 async function removeProject(responseURL,userID,projectID,projectName) {
 	try {
 		let currentDate = new Date().toISOString();
-		let unassignQuery = "Update delivery_users_projects set active='"+ "false" +"', date_unassigned ='"+ currentDate + "' where project_id='"+ projectID+"' and user_id='"+userID+"';"
+		let unassignQuery = {
+			text: "UPDATE delivery_users_projects SET active='false', date_unassigned = $1 WHERE project_id =$2 AND user_id=$3",
+			values: [currentDate, projectID, userID],
+		};
 		let queryResult = await sendQuery(unassignQuery);
 		if (queryResult.rowCount) {
 			console.log("User " + userID + " unassigned project " + projectName);
@@ -1146,7 +1256,10 @@ async function updatePositiveSurvey(responseURL,userID, rating,projectID, projec
 		let d1 = new Date(0);
 		let d2 = new Date(0);
 		d1.setUTCSeconds(postedDate);
-		let insQuery = "Insert into projectsurvey (user_id,project_id,rating,posteddate) values ('" + userID + "', '"+ projectID + "', '" + rating +"', '" + d1.toISOString() + "')";
+		let insQuery = {
+			text: "INSERT INTO projectsurvey (user_id,project_id,rating,posteddate) VALUES($1,$2,$3,$4)",
+			values: [userID, projectID, rating, d1.toISOString()],
+		};
 		let queryResult = await sendQuery(insQuery);
 		if (queryResult.rowCount) {
 			console.log("User " + userID + " added survey with rating " + rating + " for project " + projectID);
@@ -1201,13 +1314,16 @@ async function processViewSubmission(requestPayload, res) {
 		let userID = requestPayload.user.id;
 		let responseURL = requestPayload.view.callback_id;
 		let postedDate = new Date();
-		let checkProjectIDQuery = "select id from projects where projectname='"+ projectName+"' and active='true'"
+		let checkProjectIDQuery = {
+			text: "SELECT id FROM projects WHERE projectname=$1 AND active='true'",
+			values: [projectName],
+		};
 		let projectIDResult = await sendQuery(checkProjectIDQuery);
 		let projectID = projectIDResult.rows[0].id
 		const insQuery = {
-			text: "Insert into projectsurvey (user_id,project_id,rating,comment,posteddate) values($1,$2,$3,$4,$5)",
-			values: [userID,projectID,rating,comments,postedDate.toISOString()],
-		}
+			text: "INSERT INTO projectsurvey (user_id,project_id,rating,comment,posteddate) VALUES($1,$2,$3,$4,$5)",
+			values: [userID, projectID, rating, comments, postedDate.toISOString()],
+		};
 		let queryResult = await sendQuery(insQuery);
 		if (queryResult.rowCount) {
 			console.log("User " + userID + " added survey with comment and rating " + rating + " for project " + projectID);
@@ -1307,7 +1423,10 @@ async function userTimeZone(timezone) {
 	let checkTime = await getLocalHour(timezone);
 	if(checkTime) {
 		console.log("Sending survey to users in timezone " + timezone);
-		let usersInTimeZoneQuery = "select * from delivery_users where active='true' and timezone='" +timezone+ "';";
+		let usersInTimeZoneQuery = {
+			text: "SELECT * FROM delivery_users WHERE active='true' AND timezone=$1",
+			values: [timezone],
+		};
 		let usersInTimeZoneQueryResult = await sendQuery(usersInTimeZoneQuery);
 		for (let j = 0; j < usersInTimeZoneQueryResult.rows.length; j++) {
 			let userID = [{ user_id: usersInTimeZoneQueryResult.rows[j].user_id }];
@@ -1321,7 +1440,7 @@ async function scheduleMessages() {
 	console.log("Kicking off Schedule");
 	try {
 		let usersByTZ = {};
-		let checkUsersQuery = "select exists(select 1 from delivery_users where active='true')"
+		let checkUsersQuery = "SELECT EXISTS(SELECT 1 FROM delivery_users WHERE active='true')";
 		let checkUsersQueryResult = await sendQuery(checkUsersQuery);
 		if(!checkUsersQueryResult.rows[0].exists) {
 			console.log("Cannot ping any users, no actve users exists");
@@ -1369,7 +1488,7 @@ const startServer = async () => {
 	let retries =  5;
 	while (retries) {
 		try {
-			let checkProjectQuery = "select exists(select 1 from projects where active='true')"
+			let checkProjectQuery = "SELECT EXISTS(SELECT 1 FROM projects WHERE active='true')";
 			let checkProjectQueryResult = await sendQuery(checkProjectQuery);
 			console.log("DBConnection success, started Project Health Checkup.")
 			break;
