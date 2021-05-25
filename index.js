@@ -1170,22 +1170,18 @@ async function sendSurvey(userID) {
 							text: "SELECT projectname FROM projects WHERE id=$1 AND active='true'",
 							values: [projectID],
 						};
-						console.log(`Channel Id = ${channelID}\n projectID = ${projectID}\n`);
 						let projectNameResult = await sendQuery(checkProjectNameQuery);
 						let projectName = projectNameResult.rows[0].projectname
 						let getPreviousStatusQuery = {
 							text: "SELECT rating,comment FROM projectsurvey WHERE user_id=$1 AND project_id=$2 ORDER BY posteddate DESC LIMIT 1;",
 							values: [channelID, projectID],
 						};
-						console.log(getPreviousStatusQuery);
 						let getPreviousResult = await sendQuery(getPreviousStatusQuery);
-						console.log(getPreviousResult.rowCount);
 						if (getPreviousResult.rowCount <= 0) {
 							var surveyQuestionJson = JSON.stringify(interactiveJson.surveryQuestion)
 								.replace("*project", projectName)
 								.replace(/\*projectID/g, projectID);
 						} else {
-							console.log("\nrow found\n");
 							let projectRating = getPreviousResult.rows[0].rating;
 							let projectComment = getPreviousResult.rows[0].comment;
 							var surveyQuestionJson = JSON.stringify(interactiveJson.surveryQuestionResubmit)
@@ -1194,7 +1190,6 @@ async function sendSurvey(userID) {
 								.replace(/\*ProjectRating/g, projectRating)
 								.replace(/\*ProjectComment/g, projectComment);
 						}
-						console.log(JSON.stringify(getPreviousResult));
 						console.log(
 							"Sending project survey notification to " +
 								channelID +
@@ -1270,7 +1265,6 @@ async function resubmitLastSurvey(responseURL, userID, projectID, projectName, p
 			text: "SELECT rating,comment FROM projectsurvey WHERE user_id=$1 AND project_id=$2 ORDER BY posteddate DESC LIMIT 1;",
 			values: [userID, projectID],
 		};
-		console.log(getPreviousStatusQuery);
 		let getPreviousResult = await sendQuery(getPreviousStatusQuery);
 		let rating = getPreviousResult.rows[0].rating;
 		let comment = getPreviousResult.rows[0].comment;
@@ -1365,7 +1359,6 @@ async function updatePositiveSurvey(responseURL,userID, rating,projectID, projec
 // open up survey modal
 async function expandSurvey(requestPayload,userID, rating,projectID, projectName,postedDate) {
 	try {
-		console.log("Current Rating is: " + rating);
 		if (rating == "6") {
 			var surveyQuestionJson = JSON.stringify(interactiveJson.surveyModalDefault)
 				.replace(/\*project/g, projectName)
@@ -1377,18 +1370,31 @@ async function expandSurvey(requestPayload,userID, rating,projectID, projectName
 				.replace(/\*initialValue/g, projectName + "_" + rating)
 				.replace(/\*initialText/g, rating);
 		}
-		console.log(surveyQuestionJson);
-		surveyQuestionJson = JSON.parse(surveyQuestionJson);	
-		closeSurvey(requestPayload.response_url, "If you accidently closed the popup without submitting, type /deliveryhealthsurvey to get a new survey for project " + projectName + " for Project Health Checkup.");
+		surveyQuestionJson = JSON.parse(surveyQuestionJson);
+		closeSurvey(
+			requestPayload.response_url,
+			"If you accidently closed the popup without submitting, type /deliveryhealthsurvey to get a new survey for project " +
+				projectName +
+				" for Project Health Checkup."
+		);
 		webClient.views.open({
 			trigger_id: requestPayload.trigger_id,
 			view: surveyQuestionJson,
 		});
 		console.log("User " + userID + " toggled popup survey for project " + projectName);
 	} catch (e) {
-		console.log("User " + userID + " attempted to toggled popup survey for project " + projectName + " but had an error!");
+		console.log(
+			"User " + userID + " attempted to toggled popup survey for project " + projectName + " but had an error!"
+		);
 		console.log("Error: " + e);
-		closeSurvey(requestPayload.response_url, "There was an error recording your response rating of " + rating + " for project " + projectName + " for Project Health Checkup! Please try using /deliveryhealthsurvey to get a new survey");
+		closeSurvey(
+			requestPayload.response_url,
+			"There was an error recording your response rating of " +
+				rating +
+				" for project " +
+				projectName +
+				" for Project Health Checkup! Please try using /deliveryhealthsurvey to get a new survey"
+		);
 	}
 }
 
