@@ -1277,7 +1277,19 @@ async function updatePositiveSurvey(responseURL,userID, rating,projectID, projec
 // open up survey modal
 async function expandSurvey(requestPayload,userID, rating,projectID, projectName,postedDate) {
 	try {
-		let surveyQuestionJson = JSON.stringify(interactiveJson.surveyModal).replace(/\*project/g, projectName).replace(/\*surveyURL/g, requestPayload.response_url);
+		console.log("Current Rating is: " + rating);
+		if (rating == "6") {
+			var surveyQuestionJson = JSON.stringify(interactiveJson.surveyModalDefault)
+				.replace(/\*project/g, projectName)
+				.replace(/\*surveyURL/g, requestPayload.response_url);
+		} else {
+			var surveyQuestionJson = JSON.stringify(interactiveJson.surveyModal)
+				.replace(/\*project/g, projectName)
+				.replace(/\*surveyURL/g, requestPayload.response_url)
+				.replace(/\*initialValue/g, projectName + "_" + rating)
+				.replace(/\*initialText/g, rating);
+		}
+		console.log(surveyQuestionJson);
 		surveyQuestionJson = JSON.parse(surveyQuestionJson);	
 		closeSurvey(requestPayload.response_url, "If you accidently closed the popup without submitting, type /deliveryhealthsurvey to get a new survey for project " + projectName + " for Project Health Checkup.");
 		webClient.views.open({
