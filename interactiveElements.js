@@ -373,6 +373,141 @@ exports.surveryQuestion = {
 	],
 };
 
+exports.surveryQuestionResubmit = {
+	blocks: [
+		{
+			type: "header",
+			text: {
+				type: "plain_text",
+				text: "How well is *project going?",
+			},
+		},
+		{
+			type: "actions",
+			elements: [
+				{
+					type: "button",
+					action_id: "click1",
+					text: {
+						type: "plain_text",
+						text: "1",
+						emoji: true,
+					},
+					style: "primary",
+					value: "*projectID",
+				},
+				{
+					type: "button",
+					action_id: "click2",
+					text: {
+						type: "plain_text",
+						text: "2",
+						emoji: true,
+					},
+					style: "primary",
+					value: "*projectID",
+				},
+				{
+					type: "button",
+					action_id: "click3",
+					text: {
+						type: "plain_text",
+						text: "3",
+						emoji: true,
+					},
+					style: "primary",
+					value: "*projectID",
+				},
+				{
+					type: "button",
+					action_id: "click4",
+					text: {
+						type: "plain_text",
+						text: "4",
+						emoji: true,
+					},
+					style: "primary",
+					value: "*projectID",
+				},
+				{
+					type: "button",
+					action_id: "click5",
+					text: {
+						type: "plain_text",
+						text: "5",
+						emoji: true,
+					},
+					style: "primary",
+					value: "*projectID",
+				},
+				{
+					type: "button",
+					action_id: "comments6",
+					text: {
+						type: "plain_text",
+						text: "Enter Comments and Rating",
+						emoji: true,
+					},
+					style: "primary",
+					value: "*projectID",
+				},
+			],
+		},
+		{
+			type: "section",
+			text: {
+				type: "mrkdwn",
+				text: "*_You last submitted the following for this project:_*\n *Rating*: *ProjectRating \t*Comment*: *ProjectComment",
+			},
+		},
+		{
+			type: "actions",
+			elements: [
+				{
+					type: "button",
+					action_id: "Resubmit_Last",
+					text: {
+						type: "plain_text",
+						text: "Resubmit Last Status",
+						emoji: true,
+					},
+					style: "primary",
+					value: "*projectID",
+				},
+			],
+		},
+		{
+			type: "divider",
+		},
+		{
+			type: "section",
+			text: {
+				type: "mrkdwn",
+				text: "Click here to remove this from your active projects",
+			},
+		},
+		{
+			type: "actions",
+			elements: [
+				{
+					type: "button",
+					action_id: "Remove_Project",
+					text: {
+						type: "plain_text",
+						text: "Remove Project",
+						emoji: true,
+					},
+					style: "primary",
+					value: "*projectID",
+				},
+			],
+		},
+		{
+			type: "divider",
+		},
+	],
+};
+
 exports.projectList = {
 	blocks: [
 		{

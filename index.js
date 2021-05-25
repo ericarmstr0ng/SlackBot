@@ -1170,10 +1170,39 @@ async function sendSurvey(userID) {
 							text: "SELECT projectname FROM projects WHERE id=$1 AND active='true'",
 							values: [projectID],
 						};
+						console.log(`Channel Id = ${channelID}\n projectID = ${projectID}\n`);
 						let projectNameResult = await sendQuery(checkProjectNameQuery);
 						let projectName = projectNameResult.rows[0].projectname
-						console.log("Sending project survey notification to " + channelID + " for project " + projectName + " projectid: " + projectID);
-						let surveyQuestionJson = JSON.stringify(interactiveJson.surveryQuestion).replace("*project", projectName).replace(/\*projectID/g, projectID);
+						let getPreviousStatusQuery = {
+							text: "SELECT rating,comment FROM projectsurvey WHERE user_id=$1 AND project_id=$2 ORDER BY posteddate DESC LIMIT 1;",
+							values: [channelID, projectID],
+						};
+						console.log(getPreviousStatusQuery);
+						let getPreviousResult = await sendQuery(getPreviousStatusQuery);
+						console.log(getPreviousResult.rowCount);
+						if (getPreviousResult.rowCount <= 0) {
+							var surveyQuestionJson = JSON.stringify(interactiveJson.surveryQuestion)
+								.replace("*project", projectName)
+								.replace(/\*projectID/g, projectID);
+						} else {
+							console.log("\nrow found\n");
+							let projectRating = getPreviousResult.rows[0].rating;
+							let projectComment = getPreviousResult.rows[0].comment;
+							var surveyQuestionJson = JSON.stringify(interactiveJson.surveryQuestionResubmit)
+								.replace("*project", projectName)
+								.replace(/\*projectID/g, projectID)
+								.replace(/\*ProjectRating/g, projectRating)
+								.replace(/\*ProjectComment/g, projectComment);
+						}
+						console.log(JSON.stringify(getPreviousResult));
+						console.log(
+							"Sending project survey notification to " +
+								channelID +
+								" for project " +
+								projectName +
+								" projectid: " +
+								projectID
+						);
 						surveyQuestionJson = JSON.parse(surveyQuestionJson);
 						const slackMessage = {
 							...surveyQuestionJson,
@@ -1202,28 +1231,87 @@ function processBlockActions(requestPayload, res) {
 	let sendTime = parseFloat(requestPayload.container.message_ts);
 	let actionTime = parseFloat(requestPayload.actions[0].action_ts);
 	let closeStatus = actionTime - sendTime <= 18 * 60 * 60;
-	if(!closeStatus) {
+	if (!closeStatus) {
 		closeSurvey(responseURL, "Your response was past 18 hours. The result of this survey has not been recorded.?");
-	}
-	else {
+	} else {
 		if ("click1,click2,click3,comments6".includes(userResponse)) {
 			let projectName = requestPayload.message.text;
-			let rating = JSON.stringify(requestPayload.actions[0].action_id)[requestPayload.actions[0].action_id.length];
+			let rating = JSON.stringify(requestPayload.actions[0].action_id)[
+				requestPayload.actions[0].action_id.length
+			];
 			let userID = requestPayload.user.id;
 			let projectID = requestPayload.actions[0].value;
-			expandSurvey(requestPayload,userID, rating,projectID,projectName,actionTime);
-		} else if("Remove_Project".includes(userResponse)){ 
+			expandSurvey(requestPayload, userID, rating, projectID, projectName, actionTime);
+		} else if ("Remove_Project".includes(userResponse)) {
 			let projectName = requestPayload.message.text;
 			let userID = requestPayload.user.id;
 			let projectID = requestPayload.actions[0].value;
-			removeProject(responseURL,userID,projectID,projectName);
+			removeProject(responseURL, userID, projectID, projectName);
+		} else if ("Resubmit_Last".includes(userResponse)) {
+			let projectName = requestPayload.message.text;
+			let userID = requestPayload.user.id;
+			let projectID = requestPayload.actions[0].value;
+			resubmitLastSurvey(responseURL, userID, projectID, projectName, actionTime);
 		} else {
 			let projectName = requestPayload.message.text;
-			let rating = JSON.stringify(requestPayload.actions[0].action_id)[requestPayload.actions[0].action_id.length];
+			let rating = JSON.stringify(requestPayload.actions[0].action_id)[
+				requestPayload.actions[0].action_id.length
+			];
 			let userID = requestPayload.user.id;
 			let projectID = requestPayload.actions[0].value;
-			updatePositiveSurvey(responseURL,userID, rating,projectID,projectName,actionTime);
+			updatePositiveSurvey(responseURL, userID, rating, projectID, projectName, actionTime);
 		}
+	}
+}
+
+async function resubmitLastSurvey(responseURL, userID, projectID, projectName, postedDate) {
+	try {
+		let getPreviousStatusQuery = {
+			text: "SELECT rating,comment FROM projectsurvey WHERE user_id=$1 AND project_id=$2 ORDER BY posteddate DESC LIMIT 1;",
+			values: [userID, projectID],
+		};
+		console.log(getPreviousStatusQuery);
+		let getPreviousResult = await sendQuery(getPreviousStatusQuery);
+		let rating = getPreviousResult.rows[0].rating;
+		let comment = getPreviousResult.rows[0].comment;
+		let d1 = new Date(0);
+		d1.setUTCSeconds(postedDate);
+		let insQuery = {
+			text: "INSERT INTO projectsurvey (user_id,project_id,rating,comment,posteddate) VALUES($1,$2,$3,$4,$5)",
+			values: [userID, projectID, rating, comment, d1.toISOString()],
+		};
+		let queryResult = await sendQuery(insQuery);
+		if (queryResult.rowCount) {
+			console.log("User " + userID + " added survey with rating " + rating + " for project " + projectID);
+			closeSurvey(
+				responseURL,
+				"Your previous response rating of " +
+					rating +
+					" for " +
+					projectName +
+					" has been recorded for Project Health Checkup!"
+			);
+		} else {
+			console.log("User " + userID + " did not correctly add survey for project " + projectID);
+			closeSurvey(
+				responseURL,
+				"There was an error recording your response rating of " +
+					rating +
+					" for project " +
+					projectName +
+					" for Project Health Checkup! Please try using /deliveryhealthsurvey to get a new survey"
+			);
+		}
+	} catch (e) {
+		console.log("Error: " + e);
+		closeSurvey(
+			responseURL,
+			"There was an error recording your response rating of " +
+				rating +
+				" for project " +
+				projectName +
+				" for Project Health Checkup! Please try using /deliveryhealthsurvey to get a new survey"
+		);
 	}
 }
 
