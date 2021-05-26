@@ -1185,19 +1185,13 @@ async function sendSurvey(userID) {
 							let projectRating = getPreviousResult.rows[0].rating;
 							let projectComment = getPreviousResult.rows[0].comment;
 							if(projectComment==null) {
-								var surveyQuestionJson = JSON.stringify(interactiveJson.surveryQuestionResubmit)
-									.replace("*project", projectName)
-									.replace(/\*projectID/g, projectID)
-									.replace(/\*ProjectRating/g, projectRating)
-									.replace(/\*ProjectComment/g, "No Comment");
+								projectComment = "No Comment"
 							}
-							else {
-								var surveyQuestionJson = JSON.stringify(interactiveJson.surveryQuestionResubmit)
+							var surveyQuestionJson = JSON.stringify(interactiveJson.surveryQuestionResubmit)
 								.replace("*project", projectName)
 								.replace(/\*projectID/g, projectID)
 								.replace(/\*ProjectRating/g, projectRating)
 								.replace(/\*ProjectComment/g, projectComment);
-							}
 						}
 						console.log(
 							"Sending project survey notification to " +
