@@ -1184,11 +1184,20 @@ async function sendSurvey(userID) {
 						} else {
 							let projectRating = getPreviousResult.rows[0].rating;
 							let projectComment = getPreviousResult.rows[0].comment;
-							var surveyQuestionJson = JSON.stringify(interactiveJson.surveryQuestionResubmit)
+							if(projectComment==null) {
+								var surveyQuestionJson = JSON.stringify(interactiveJson.surveryQuestionResubmit)
+									.replace("*project", projectName)
+									.replace(/\*projectID/g, projectID)
+									.replace(/\*ProjectRating/g, projectRating)
+									.replace(/\*ProjectComment/g, "No Comment");
+							}
+							else {
+								var surveyQuestionJson = JSON.stringify(interactiveJson.surveryQuestionResubmit)
 								.replace("*project", projectName)
 								.replace(/\*projectID/g, projectID)
 								.replace(/\*ProjectRating/g, projectRating)
 								.replace(/\*ProjectComment/g, projectComment);
+							}
 						}
 						console.log(
 							"Sending project survey notification to " +
