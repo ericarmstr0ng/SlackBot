@@ -1173,7 +1173,7 @@ async function sendSurvey(userID) {
 						let projectNameResult = await sendQuery(checkProjectNameQuery);
 						let projectName = projectNameResult.rows[0].projectname
 						let getPreviousStatusQuery = {
-							text: "SELECT rating,comment FROM projectsurvey WHERE user_id=$1 AND project_id=$2 ORDER BY posteddate DESC LIMIT 1;",
+							text: "SELECT rating,comment FROM projectsurvey WHERE user_id=$1 AND project_id=$2 ORDER BY id DESC LIMIT 1;",
 							values: [channelID, projectID],
 						};
 						let getPreviousResult = await sendQuery(getPreviousStatusQuery);
@@ -1265,7 +1265,7 @@ function processBlockActions(requestPayload, res) {
 async function resubmitLastSurvey(responseURL, userID, projectID, projectName, postedDate) {
 	try {
 		let getPreviousStatusQuery = {
-			text: "SELECT rating,comment FROM projectsurvey WHERE user_id=$1 AND project_id=$2 ORDER BY posteddate DESC LIMIT 1;",
+			text: "SELECT rating,comment FROM projectsurvey WHERE user_id=$1 AND project_id=$2 ORDER BY id DESC LIMIT 1;",
 			values: [userID, projectID],
 		};
 		let getPreviousResult = await sendQuery(getPreviousStatusQuery);
