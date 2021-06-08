@@ -259,6 +259,22 @@ exports.surveyHeader = {
 			]
 		},
 		{
+			type: "actions",
+			elements: [
+				{
+					type: "button",
+					action_id: "outofoffice",
+					text: {
+						type: "plain_text",
+						text: "Update Out Of Office",
+						emoji: true
+					},
+					style: "primary",
+					value: "outofoffice"
+				}
+			]
+		},
+		{
 			type: "divider",
 		},
 	],
@@ -345,13 +361,6 @@ exports.surveryQuestion = {
 			],
 		},
 		{
-			type: "section",
-			text: {
-				type: "mrkdwn",
-				text: "Click here to remove this from your active projects",
-			},
-		},
-		{
 			type: "actions",
 			elements: [
 				{
@@ -360,12 +369,12 @@ exports.surveryQuestion = {
 					text: {
 						type: "plain_text",
 						text: "Remove Project",
-						emoji: true,
+						emoji: true
 					},
-					style: "primary",
-					value: "*projectID",
-				},
-			],
+					style: "danger",
+					value: "*projectID"
+				}
+			]
 		},
 		{
 			type: "divider",
@@ -379,8 +388,8 @@ exports.surveryQuestionResubmit = {
 			type: "header",
 			text: {
 				type: "plain_text",
-				text: "How well is *project going?",
-			},
+				text: "How well is *project going?"
+			}
 		},
 		{
 			type: "actions",
@@ -391,10 +400,10 @@ exports.surveryQuestionResubmit = {
 					text: {
 						type: "plain_text",
 						text: "1",
-						emoji: true,
+						emoji: true
 					},
 					style: "primary",
-					value: "*projectID",
+					value: "*projectID"
 				},
 				{
 					type: "button",
@@ -402,10 +411,10 @@ exports.surveryQuestionResubmit = {
 					text: {
 						type: "plain_text",
 						text: "2",
-						emoji: true,
+						emoji: true
 					},
 					style: "primary",
-					value: "*projectID",
+					value: "*projectID"
 				},
 				{
 					type: "button",
@@ -413,10 +422,10 @@ exports.surveryQuestionResubmit = {
 					text: {
 						type: "plain_text",
 						text: "3",
-						emoji: true,
+						emoji: true
 					},
 					style: "primary",
-					value: "*projectID",
+					value: "*projectID"
 				},
 				{
 					type: "button",
@@ -424,10 +433,10 @@ exports.surveryQuestionResubmit = {
 					text: {
 						type: "plain_text",
 						text: "4",
-						emoji: true,
+						emoji: true
 					},
 					style: "primary",
-					value: "*projectID",
+					value: "*projectID"
 				},
 				{
 					type: "button",
@@ -435,10 +444,10 @@ exports.surveryQuestionResubmit = {
 					text: {
 						type: "plain_text",
 						text: "5",
-						emoji: true,
+						emoji: true
 					},
 					style: "primary",
-					value: "*projectID",
+					value: "*projectID"
 				},
 				{
 					type: "button",
@@ -446,19 +455,19 @@ exports.surveryQuestionResubmit = {
 					text: {
 						type: "plain_text",
 						text: "Enter Comments and Rating",
-						emoji: true,
+						emoji: true
 					},
 					style: "primary",
-					value: "*projectID",
-				},
-			],
+					value: "*projectID"
+				}
+			]
 		},
 		{
 			type: "section",
 			text: {
 				type: "mrkdwn",
-				text: "*_You last submitted the following for this project:_*\n *Rating*: *ProjectRating \t*Comment*: *ProjectComment",
-			},
+				text: "*_You last submitted the following for this project:_*\n *Rating*: *ProjectRating \t*Comment*: *ProjectComment"
+			}
 		},
 		{
 			type: "actions",
@@ -469,43 +478,27 @@ exports.surveryQuestionResubmit = {
 					text: {
 						type: "plain_text",
 						text: "Resubmit Last Status",
-						emoji: true,
+						emoji: true
 					},
-					style: "primary",
-					value: "*projectID",
+					value: "*projectID"
 				},
-			],
-		},
-		{
-			type: "divider",
-		},
-		{
-			type: "section",
-			text: {
-				type: "mrkdwn",
-				text: "Click here to remove this from your active projects",
-			},
-		},
-		{
-			type: "actions",
-			elements: [
 				{
 					type: "button",
 					action_id: "Remove_Project",
 					text: {
 						type: "plain_text",
 						text: "Remove Project",
-						emoji: true,
+						emoji: true
 					},
-					style: "primary",
-					value: "*projectID",
-				},
-			],
+					style: "danger",
+					value: "*projectID"
+				}
+			]
 		},
 		{
-			type: "divider",
-		},
-	],
+			type: "divider"
+		}
+	]
 };
 
 exports.projectList = {

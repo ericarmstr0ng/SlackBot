@@ -1223,42 +1223,66 @@ async function sendSurvey(userID) {
 
 // Process Block Actions
 function processBlockActions(requestPayload, res) {
+	res.status(200).end()
 	let userResponse = requestPayload.actions[0].action_id;
 	let surveyQuestion = requestPayload.message.blocks[0].text.text;
 	let responseURL = requestPayload.response_url;
 	let sendTime = parseFloat(requestPayload.container.message_ts);
 	let actionTime = parseFloat(requestPayload.actions[0].action_ts);
 	let closeStatus = actionTime - sendTime <= 18 * 60 * 60;
-	if (!closeStatus) {
-		closeSurvey(responseURL, "Your response was past 18 hours. The result of this survey has not been recorded.?");
-	} else {
-		if ("click1,click2,click3,comments6".includes(userResponse)) {
-			let projectName = requestPayload.message.text;
-			let rating = JSON.stringify(requestPayload.actions[0].action_id)[
-				requestPayload.actions[0].action_id.length
-			];
-			let userID = requestPayload.user.id;
-			let projectID = requestPayload.actions[0].value;
-			expandSurvey(requestPayload, userID, rating, projectID, projectName, actionTime);
-		} else if ("Remove_Project".includes(userResponse)) {
-			let projectName = requestPayload.message.text;
-			let userID = requestPayload.user.id;
-			let projectID = requestPayload.actions[0].value;
-			removeProject(responseURL, userID, projectID, projectName);
-		} else if ("Resubmit_Last".includes(userResponse)) {
-			let projectName = requestPayload.message.text;
-			let userID = requestPayload.user.id;
-			let projectID = requestPayload.actions[0].value;
-			resubmitLastSurvey(responseURL, userID, projectID, projectName, actionTime);
+	console.log("User response: " + userResponse);
+	if ("outofoffice".includes(userResponse)) {
+		let userID = requestPayload.user.id;
+		expandOutOfOffice(requestPayload, userID);
+	}
+	else {
+		if (!closeStatus) {
+			closeSurvey(responseURL, "Your response was past 18 hours. The result of this survey has not been recorded.?");
 		} else {
-			let projectName = requestPayload.message.text;
-			let rating = JSON.stringify(requestPayload.actions[0].action_id)[
-				requestPayload.actions[0].action_id.length
-			];
-			let userID = requestPayload.user.id;
-			let projectID = requestPayload.actions[0].value;
-			updatePositiveSurvey(responseURL, userID, rating, projectID, projectName, actionTime);
+			if ("click1,click2,click3,comments6".includes(userResponse)) {
+				let projectName = requestPayload.message.text;
+				let rating = JSON.stringify(requestPayload.actions[0].action_id)[
+					requestPayload.actions[0].action_id.length
+				];
+				let userID = requestPayload.user.id;
+				let projectID = requestPayload.actions[0].value;
+				expandSurvey(requestPayload, userID, rating, projectID, projectName, actionTime);
+			} else if ("Remove_Project".includes(userResponse)) {
+				let projectName = requestPayload.message.text;
+				let userID = requestPayload.user.id;
+				let projectID = requestPayload.actions[0].value;
+				removeProject(responseURL, userID, projectID, projectName);
+			} else if ("Resubmit_Last".includes(userResponse)) {
+				let projectName = requestPayload.message.text;
+				let userID = requestPayload.user.id;
+				let projectID = requestPayload.actions[0].value;
+				resubmitLastSurvey(responseURL, userID, projectID, projectName, actionTime);
+			} else {
+				let projectName = requestPayload.message.text;
+				let rating = JSON.stringify(requestPayload.actions[0].action_id)[
+					requestPayload.actions[0].action_id.length
+				];
+				let userID = requestPayload.user.id;
+				let projectID = requestPayload.actions[0].value;
+				updatePositiveSurvey(responseURL, userID, rating, projectID, projectName, actionTime);
+			}
 		}
+	}
+}
+
+// open up survey modal
+async function expandOutOfOffice(requestPayload,userID) {
+	try {
+		
+	} catch (e) {
+		console.log(
+			"User " + userID + " attempted to toggled out of office but had an error!"
+		);
+		console.log("Error: " + e);
+		closeOOO(
+			userID,
+			"There was an error opening Out Of Office request! Please try again."
+		);
 	}
 }
 
@@ -1401,6 +1425,22 @@ async function expandSurvey(requestPayload,userID, rating,projectID, projectName
 	}
 }
 
+// DONT replace the survey text
+async function closeOOO(userID, responseText) {
+	try {
+		const slackMessage = {
+			...{
+				channel: userID,
+				text: responseText,
+			},
+		};
+		await webClient.chat.postMessage(slackMessage);
+	}
+	catch {
+		console.log("Issue sending out of office response to " + userID);
+	}
+}
+
 // replace the survey text
 function closeSurvey(responseURL, responseText) {
 	axios
@@ -1493,7 +1533,6 @@ app.post("/option/slack/actions", UrlEncoder, async (req, res) => {
 
 // ******************************** START AND SCHEDULE USERS **************************
 
-// Date Pickers
 app.post("/deliveryTest", UrlEncoder, async (req, res) => {
 	res.setHeader("Content-Type", "application/json");
 	let checkUserQuery = await formatCheckUserQuery(req.body);
