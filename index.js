@@ -215,50 +215,60 @@ app.post("/deliveryhealthsignupuser", UrlEncoder, async (req, res) => {
 	}
 });
 
-app.post("/changeTimeZone", UrlEncoder, async (req, res) => {
-	res.setHeader("Content-Type", "application/json");
-	console.log("User " + req.body.user_id + " attempting change time zone ");
+async function syncTimezone(req, userID,res) {
+	console.log("User " + userID + " attempting change time zone ");
 	try {
-		let checkUserQuery = await formatCheckUserQuery(req.body);
-		let checkUserQueryResult = await sendQuery(checkUserQuery);
-		if(!checkUserQueryResult.rows[0].exists) {
-			console.log("User " + req.body.user_id + " not signed up, cannot change timezone.");
-			res.end("You must be signed up for Project Health Checkup to run this command! Run /deliveryhealth to sign up.");
+		let query = {
+			text: "SELECT * FROM delivery_users WHERE user_ID=$1 AND active='true'",
+			values: [userID],
+		};
+		let checkUserQueryResult = await sendQuery(query);
+		if(checkUserQueryResult.rowCount != 1) {
+			console.log("User " + userID + " not signed up, cannot add ooo");
+			closeOOO(
+				userID,
+				"You must be signed up for Project Health Checkup to change your timezone! Run /deliveryhealth to sign up."
+			);
 		}
 		else {
-			let insQuery = await formatTimeZoneQuery(req.body);
+			let userInfo = await webClient.users.info({ user: userID });
+			let userName = userInfo.user.real_name;
+			let timeZone = userInfo.user.tz;
+			console.log("Attempt to update user " + userName + ", " + userID + ", with timeZone " + timeZone);
+		
+			let insQuery =
+				"Update delivery_users set username = '"+ userName + "', timezone = '"+ timeZone + "' Where user_id = '"+ userID+"';"
 			try {
+				
 				let queryResult = await sendQuery(insQuery);
 				if (queryResult.rowCount) {
-					console.log("User " + req.body.user_id + " timezone updated.");
-					res.end("Your time zone has been updated!");
+					console.log("User " + userID + " timezone updated.");
+					closeOOO(
+						userID,
+						"Your timezone has been updated to per your slack profile to " + timeZone + ". You will be pinged at 9am " + timeZone + "."
+					);
 				} else {
-					console.log("User " + req.body.user_id + " did not change time zone correctly.");
-					res.end("There was an error updating your time zone!");
+					console.log("User " + userID + " did not change timezone correctly.");
+					closeOOO(
+						userID,
+						"There was an error updating your timezone!"
+					);
 				}
 			} catch (e) {
 				console.log(e);
-				res.end("There was an error changing your timezone for Project Health Checkup!");
+				closeOOO(
+					userID,
+					"There was an error updating your timezone!"
+				);
 			}
 		}
 	} catch (e) {
 		console.log(e);
-		res.end("There was an error changing your timezone for Project Health Checkup!");
+		closeOOO(
+			userID,
+			"There was an error updating your timezone!"
+		);
 	}
-});
-
-// Format query to update users
-async function formatTimeZoneQuery(requestPayload) {
-	let userId = requestPayload.user_id;
-	let userInfo = await webClient.users.info({ user: userId });
-	let userName = userInfo.user.real_name;
-	let timeZone = userInfo.user.tz;
-
-	console.log("Attempt to update user " + userName + ", " + userId + ", with timeZone " + timeZone);
-
-	let insQuery =
-		"Update delivery_users set username = '"+ userName + "', timezone = '"+ timeZone + "' Where user_id = '"+ userId+"';"
-	return insQuery;
 }
 
 // Format query to get users
@@ -1155,9 +1165,24 @@ async function sendSurvey(userID) {
 				};
 				webClient.chat.postMessage(slackMessage);
 			}
-			else{
+			else {
 				try {
+					let query = {
+						text: "SELECT * FROM delivery_users WHERE user_ID=$1 AND active='true'",
+						values: [channelID],
+					};
+					let checkUserQueryResult = await sendQuery(query);
+					startDate = checkUserQueryResult.rows[0].start_outofoffice;
+					endDate = checkUserQueryResult.rows[0].end_outofoffice;
 					let surveyHeaderJson = JSON.stringify(interactiveJson.surveyHeader)
+					if(startDate != null) {
+						startDate = startDate.getFullYear()+ '-' + String(startDate.getMonth() + 1 ).padStart(2,'0') + '-' + String(startDate.getDate()).padStart(2,'0');
+						endDate = endDate.getFullYear()+ '-' + String(endDate.getMonth() + 1 ).padStart(2,'0') + '-' + String(endDate.getDate()).padStart(2,'0');
+						surveyHeaderJson = JSON.stringify(interactiveJson.surveyHeaderOOO)
+						.replace("*outofofficeStart", startDate)
+						.replace("*outofofficeEnd", endDate);
+					}
+
 					surveyHeaderJson = JSON.parse(surveyHeaderJson);
 					const slackMessage = {
 						...surveyHeaderJson,
@@ -1223,48 +1248,60 @@ async function sendSurvey(userID) {
 
 // Process Block Actions
 function processBlockActions(requestPayload, res) {
-	res.status(200).end()
-	let userResponse = requestPayload.actions[0].action_id;
-	let surveyQuestion = requestPayload.message.blocks[0].text.text;
-	let responseURL = requestPayload.response_url;
-	let sendTime = parseFloat(requestPayload.container.message_ts);
-	let actionTime = parseFloat(requestPayload.actions[0].action_ts);
-	let closeStatus = actionTime - sendTime <= 18 * 60 * 60;
-	console.log("User response: " + userResponse);
-	if ("outofoffice".includes(userResponse)) {
-		let userID = requestPayload.user.id;
-		expandOutOfOffice(requestPayload, userID);
-	}
-	else {
-		if (!closeStatus) {
-			closeSurvey(responseURL, "Your response was past 18 hours. The result of this survey has not been recorded.?");
-		} else {
-			if ("click1,click2,click3,comments6".includes(userResponse)) {
-				let projectName = requestPayload.message.text;
-				let rating = JSON.stringify(requestPayload.actions[0].action_id)[
-					requestPayload.actions[0].action_id.length
-				];
-				let userID = requestPayload.user.id;
-				let projectID = requestPayload.actions[0].value;
-				expandSurvey(requestPayload, userID, rating, projectID, projectName, actionTime);
-			} else if ("Remove_Project".includes(userResponse)) {
-				let projectName = requestPayload.message.text;
-				let userID = requestPayload.user.id;
-				let projectID = requestPayload.actions[0].value;
-				removeProject(responseURL, userID, projectID, projectName);
-			} else if ("Resubmit_Last".includes(userResponse)) {
-				let projectName = requestPayload.message.text;
-				let userID = requestPayload.user.id;
-				let projectID = requestPayload.actions[0].value;
-				resubmitLastSurvey(responseURL, userID, projectID, projectName, actionTime);
+	if(requestPayload.actions[0].action_id == "OOOStartAction" || requestPayload.actions[0].action_id == "OOOEndAction") {
+		res.status(200).end();
+	} else {
+		console.log("Block press by: " + requestPayload.user.id);
+		res.status(200).end()
+		let userResponse = requestPayload.actions[0].action_id;
+		console.log("User response: " + userResponse);
+		if ("outofoffice".includes(userResponse)) {
+			let userID = requestPayload.user.id;
+			expandOutOfOffice(requestPayload, userID);
+		}
+		else if ('removeooo'.includes(userResponse)) {
+			let userID = requestPayload.user.id;
+			removeOOO(requestPayload, userID,res);
+		}
+		else if ('timezone'.includes(userResponse)) {
+			let userID = requestPayload.user.id;
+			syncTimezone(requestPayload, userID,res);
+		}
+		else {
+			let responseURL = requestPayload.response_url;
+			let sendTime = parseFloat(requestPayload.container.message_ts);
+			let actionTime = parseFloat(requestPayload.actions[0].action_ts);
+			let closeStatus = actionTime - sendTime <= 18 * 60 * 60;
+			if (!closeStatus) {
+				closeSurvey(responseURL, "Your response was past 18 hours. The result of this survey has not been recorded.");
 			} else {
-				let projectName = requestPayload.message.text;
-				let rating = JSON.stringify(requestPayload.actions[0].action_id)[
-					requestPayload.actions[0].action_id.length
-				];
-				let userID = requestPayload.user.id;
-				let projectID = requestPayload.actions[0].value;
-				updatePositiveSurvey(responseURL, userID, rating, projectID, projectName, actionTime);
+				if ("click1,click2,click3,comments6".includes(userResponse)) {
+					let projectName = requestPayload.message.text;
+					let rating = JSON.stringify(requestPayload.actions[0].action_id)[
+						requestPayload.actions[0].action_id.length
+					];
+					let userID = requestPayload.user.id;
+					let projectID = requestPayload.actions[0].value;
+					expandSurvey(requestPayload, userID, rating, projectID, projectName, actionTime);
+				} else if ("Remove_Project".includes(userResponse)) {
+					let projectName = requestPayload.message.text;
+					let userID = requestPayload.user.id;
+					let projectID = requestPayload.actions[0].value;
+					removeProject(responseURL, userID, projectID, projectName);
+				} else if ("Resubmit_Last".includes(userResponse)) {
+					let projectName = requestPayload.message.text;
+					let userID = requestPayload.user.id;
+					let projectID = requestPayload.actions[0].value;
+					resubmitLastSurvey(responseURL, userID, projectID, projectName, actionTime);
+				} else {
+					let projectName = requestPayload.message.text;
+					let rating = JSON.stringify(requestPayload.actions[0].action_id)[
+						requestPayload.actions[0].action_id.length
+					];
+					let userID = requestPayload.user.id;
+					let projectID = requestPayload.actions[0].value;
+					updatePositiveSurvey(responseURL, userID, rating, projectID, projectName, actionTime);
+				}
 			}
 		}
 	}
@@ -1273,7 +1310,49 @@ function processBlockActions(requestPayload, res) {
 // open up survey modal
 async function expandOutOfOffice(requestPayload,userID) {
 	try {
+		let today = new Date();
+		let currentDateString = today.getFullYear()+ '-' + String(today.getMonth() + 1 ).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
 		
+		let query = {
+			text: "SELECT * FROM delivery_users WHERE user_ID=$1 AND active='true'",
+			values: [userID],
+		};
+		let checkUserQueryResult = await sendQuery(query);
+		if(checkUserQueryResult.rowCount != 1) {
+			console.log("User " + userID + " not signed up, cannot add ooo");
+			closeOOO(
+				userID,
+				"You must be signed up for Project Health Checkup to add OOO! Run /deliveryhealth to sign up."
+			);
+		}
+		else {
+			startDate = checkUserQueryResult.rows[0].start_outofoffice;
+			endDate = checkUserQueryResult.rows[0].end_outofoffice;
+			if(startDate == null || endDate == null) {
+				startDate = currentDateString;
+				endDate = currentDateString;
+			}
+			else {
+				try {
+					startDate = startDate.getFullYear()+ '-' + String(startDate.getMonth() + 1 ).padStart(2,'0') + '-' + String(startDate.getDate()).padStart(2,'0');
+					endDate = endDate.getFullYear()+ '-' + String(endDate.getMonth() + 1 ).padStart(2,'0') + '-' + String(endDate.getDate()).padStart(2,'0');
+				} catch (e) {
+					startDate = currentDateString;
+					endDate = currentDateString;
+				}
+			}
+
+			var oooJson = JSON.stringify(interactiveJson.oooModal)
+				.replace(/\*initialEndDate/g, endDate)
+				.replace(/\*initialStartDate/g, startDate)
+				.replace(/\*surveyURL/g, requestPayload.response_url);
+			oooJson = JSON.parse(oooJson);
+			webClient.views.open({
+				trigger_id: requestPayload.trigger_id,
+				view: oooJson,
+			});
+			console.log("User " + userID + " toggled ooo");
+		}
 	} catch (e) {
 		console.log(
 			"User " + userID + " attempted to toggled out of office but had an error!"
@@ -1491,6 +1570,87 @@ async function processViewSubmission(requestPayload, res) {
 	}
 }
 
+async function removeOOO(requestPayload,userID,res) {
+	try {
+		let startDate = null;
+		let endDate = null;
+		let outOfOfficeQuery = {
+			text: "Update delivery_users set start_outofoffice=$1, end_outofoffice=$2 WHERE user_ID=$3",
+			values: [startDate,endDate,userID],
+		};
+		let queryResult = await sendQuery(outOfOfficeQuery);
+
+		if (queryResult.rowCount) {
+			closeOOO(
+				userID,
+				"Successfully updated Out Of Office. You now have no Out Of Office and will be pinged Monday - Friday."
+			);
+		}
+		else {
+			closeOOO(
+				userID,
+				"OUT OF OFFICE NOT UPDATAED!! There was an error submitting Out Of Office request! Please try again."
+			);
+		}
+	} catch (e) {
+		console.log(
+			"User " + userID + " attempted to remove out of office but had an error!"
+		);
+	}
+}
+
+async function processOOOSubmission(requestPayload, res) {
+	res.end();
+	let userID = requestPayload.user.id;
+	try {
+		let endDate = requestPayload.view.state.values.endDateBlock.OOOEndAction.selected_date;
+		let startDate = requestPayload.view.state.values.startDateBlock.OOOStartAction.selected_date;
+		let today = new Date();
+		let currentDateString = today.getFullYear()+ '-' + String(today.getMonth() + 1 ).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+
+		if(startDate > endDate) {
+			closeOOO(
+				userID,
+				"OUT OF OFFICE NOT UPDATAED!! Your start date was after your end date."
+			);
+		} else if (startDate < currentDateString) {
+			closeOOO(
+				userID,
+				"OUT OF OFFICE NOT UPDATAED!! Your start date was before today."
+			);
+		} else {
+			let outOfOfficeQuery = {
+				text: "Update delivery_users set start_outofoffice=$1, end_outofoffice=$2 WHERE user_ID=$3",
+				values: [startDate,endDate,userID],
+			};
+			let queryResult = await sendQuery(outOfOfficeQuery);
+
+			if (queryResult.rowCount) {
+				closeOOO(
+					userID,
+					"Successfully updated Out Of Office. You will not be pinged from " + startDate + " to " + endDate
+				);
+			}
+			else {
+				closeOOO(
+					userID,
+					"OUT OF OFFICE NOT UPDATAED!! There was an error submitting Out Of Office request! Please try again."
+				);
+			}
+		} 
+
+	} catch (e) {
+		console.log(
+			"User " + userID + " attempted to toggled out of office but had an error!"
+		);
+		console.log("Error: " + e);
+		closeOOO(
+			userID,
+			"OUT OF OFFICE NOT UPDATAED!! There was an error submitting Out Of Office request! Please try again."
+		);
+	}
+}
+
 //Get response from user action
 app.post("/option/slack/actions", UrlEncoder, async (req, res) => {
 	try {
@@ -1498,14 +1658,22 @@ app.post("/option/slack/actions", UrlEncoder, async (req, res) => {
 		// Retrieve Text from submission of comment
 		if (requestPayload.type == "view_submission") {
 			console.log("View submission press by: " + requestPayload.user.id);
-			try {
-				await processViewSubmission(requestPayload, res);
-			} catch (e) {
-				console.log("Error: " + e);
+			if(requestPayload.view.submit.text.includes("Out Of Office")) {
+				try {
+					await processOOOSubmission(requestPayload, res);
+				} catch (e) {
+					console.log("Error: " + e);
+				}
+			}
+			else {
+				try {
+					await processViewSubmission(requestPayload, res);
+				} catch (e) {
+					console.log("Error: " + e);
+				}
 			}
 			// Process button click
 		} else if (requestPayload.type == "block_actions") {
-			console.log("Block press by: " + requestPayload.user.id);
 			try {
 				processBlockActions(requestPayload, res);
 			} catch (e) {
@@ -1576,9 +1744,25 @@ async function userTimeZone(timezone) {
 			values: [timezone],
 		};
 		let usersInTimeZoneQueryResult = await sendQuery(usersInTimeZoneQuery);
+		let newDate = new Date();
+		let currentDate = new Date(newDate.toLocaleString('en-US',{timeZone:timezone}))
+		currentDate = currentDate.getFullYear()+ '-' + String(currentDate.getMonth() + 1 ).padStart(2,'0') + '-' + String(currentDate.getDate()).padStart(2,'0');
 		for (let j = 0; j < usersInTimeZoneQueryResult.rows.length; j++) {
 			let userID = [{ user_id: usersInTimeZoneQueryResult.rows[j].user_id }];
-			await sendSurvey(userID);
+			let oooStartDate = usersInTimeZoneQueryResult.rows[j].start_outofoffice;
+			let oooEndDate = usersInTimeZoneQueryResult.rows[j].end_outofoffice;
+			let cantSend = false; 
+			if (oooStartDate != null && oooEndDate != null) {
+				oooStartDate = oooStartDate.getFullYear()+ '-' + String(oooStartDate.getMonth() + 1 ).padStart(2,'0') + '-' + String(oooStartDate.getDate()).padStart(2,'0');
+				oooEndDate = oooEndDate.getFullYear()+ '-' + String(oooEndDate.getMonth() + 1 ).padStart(2,'0') + '-' + String(oooEndDate.getDate()).padStart(2,'0');
+				cantSend = currentDate >= oooStartDate && currentDate <= oooEndDate;
+			}
+			if (cantSend) {
+				console.log(usersInTimeZoneQueryResult.rows[j].user_id + " is ooo, not sending survey");
+			}
+			else {
+				await sendSurvey(userID);
+			}
 		}
 	}
 }
@@ -1624,7 +1808,7 @@ async function startSchedule() {
 	seconds = 60-seconds;		
 	console.log("Waiting " + minutes+ " minutes and " + seconds + " seconds to kick off schedule");
 	let waitMiliseconds = (minutes * 60 + seconds) * 1000;
-	setTimeout(scheduleMessages,waitMiliseconds);
+	setTimeout(scheduleMessages,-1);
 }
 
 async function startSlackBot() {
