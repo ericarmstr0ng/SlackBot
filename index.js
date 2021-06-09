@@ -1808,7 +1808,7 @@ async function startSchedule() {
 	seconds = 60-seconds;		
 	console.log("Waiting " + minutes+ " minutes and " + seconds + " seconds to kick off schedule");
 	let waitMiliseconds = (minutes * 60 + seconds) * 1000;
-	setTimeout(scheduleMessages,-1);
+	setTimeout(scheduleMessages,waitMiliseconds);
 }
 
 async function startSlackBot() {
