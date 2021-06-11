@@ -20,6 +20,7 @@ const slackInteractiveCom = interactiveMessage.createMessageAdapter(signingSecre
 const webClient = new WebClient(slackBotToken);
 const fs = require("fs");
 const { close } = require("inspector");
+const { networkInterfaces } = require('os');
 const adminList = process.env.ADMIN_LIST;
 const logchannel = process.env.LOGS_CHANNEL;
 const botchannel = process.env.BOT_CHANNEL;
@@ -1774,9 +1775,11 @@ async function checkLastSubmisison(userID, currentDate) {
 			let lastDateSubmitted = lastSubmissionQueryResult.rows[0].posteddate;
 			lastDateSubmitted = lastDateSubmitted.substring(0,10);
 			lastDateSubmitted = new Date(lastDateSubmitted);
+			todayDate = new Date(currentDate);
 			currentDate = new Date(currentDate);
-			currentDate.setDate(currentDate.getDate()+7)
-			if(currentDate<lastDateSubmitted) {
+			currentDate.setDate(currentDate.getDate()-7)
+			console.log(userID + " last submitted on " + lastDateSubmitted + ". Today is " + todayDate + ". To be pinged, the last submitted date would have to be " + currentDate + " which is " + (currentDate>lastDateSubmitted));
+			if(currentDate>lastDateSubmitted) {
 				await logMessageToSlack(userID, "Has not submitted a survey in at least 7 days","Please ping them to submit a survey. Otherwise, have them updated to inactive.")
 			}
 		}
@@ -1853,7 +1856,6 @@ async function userTimeZone(timezone) {
 async function scheduleMessages() {
 	console.log("Kicking off Schedule");
 	try {
-		let usersByTZ = {};
 		let checkUsersQuery = "SELECT EXISTS(SELECT 1 FROM delivery_users WHERE active='true')";
 		let checkUsersQueryResult = await sendQuery(checkUsersQuery);
 		if(!checkUsersQueryResult.rows[0].exists) {
@@ -1906,6 +1908,8 @@ const startServer = async () => {
 			let checkProjectQueryResult = await sendQuery(checkProjectQuery);
 			if(checkProjectQueryResult.rowCount) {
 				console.log("DBConnection success, started Project Health Checkup.")
+				let startTime = new Date()
+				await logMessageToSlack(botchannel, "DBConnection success, started Project Health Checkup.","Start time: " + startTime.toLocaleString());
 				break;
 			}
 			else {
