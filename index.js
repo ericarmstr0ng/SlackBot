@@ -3,7 +3,6 @@
 
 require('dotenv').config({ path: "./environment.env" });
 const { Client } = require("pg"); //Library for postgresql
-const dbConnect = require("./dbConnect");
 const axios = require("axios");
 const interactiveJson = require("./interactiveElements");
 const express = require("express");
@@ -21,8 +20,9 @@ const slackInteractiveCom = interactiveMessage.createMessageAdapter(signingSecre
 const webClient = new WebClient(slackBotToken);
 const fs = require("fs");
 const { close } = require("inspector");
-const DAY = 24 * 60 * 60 * 1000;
 const adminList = process.env.ADMIN_LIST;
+const logchannel = process.env.LOGS_CHANNEL;
+const botchannel = process.env.BOT_CHANNEL;
 
 //Server will listens this port in local host or given url
 app.listen(process.env.PORT, () => {
@@ -107,6 +107,8 @@ async function sendQuery(queryString) {
 		return result;
 	} catch (e) {
 		console.log("Issue with db query: " + e);
+		console.log("query: " + queryString);
+		await logMessageToSlack(botchannel, "Issue with a database query. " + e,"Check the logs for the query!")
 		return e;
 	}
 	finally {
@@ -1150,8 +1152,8 @@ async function buildSurveyList(surveys,user,projectName) {
 // send survey to user
 async function sendSurvey(userID) {
 	for (i = 0; i < userID.length; i++) {
+		let channelID = userID[i]["user_id"];
 		try {
-			let channelID = userID[i]["user_id"];
 			let query = {
 				text: "SELECT * FROM delivery_users_projects WHERE user_ID=$1 AND active='true'",
 				values: [channelID],
@@ -1212,6 +1214,10 @@ async function sendSurvey(userID) {
 							if(projectComment==null) {
 								projectComment = "No Comment"
 							}
+							else {
+								projectComment = JSON.stringify(projectComment);
+								projectComment = projectComment.substring(1,projectComment.length-1)
+							}
 							var surveyQuestionJson = JSON.stringify(interactiveJson.surveryQuestionResubmit)
 								.replace("*project", projectName)
 								.replace(/\*projectID/g, projectID)
@@ -1235,12 +1241,13 @@ async function sendSurvey(userID) {
 							webClient.chat.postMessage(slackMessage);}, 500);
 					}
 				} catch (e) {
-					console.log("Error sending survey to user " + userID);
+					await logMessageToSlack(channelID, "Error sending survey to user. " + e,"Please read logs and attempt to have them manually send a survey.");
+					console.log("Error sending survey to user " + channelID);
 					console.log(e);
 				}
 			}
 		} catch (e) {
-			console.log("Error sending survey to user " + userID);
+			console.log("Error sending survey to user " + channelID);
 			console.log(e);
 		}
 	}
@@ -1515,7 +1522,8 @@ async function closeOOO(userID, responseText) {
 		};
 		await webClient.chat.postMessage(slackMessage);
 	}
-	catch {
+	catch (e) {
+		console.log(e);
 		console.log("Issue sending out of office response to " + userID);
 	}
 }
@@ -1693,6 +1701,24 @@ app.post("/option/slack/actions", UrlEncoder, async (req, res) => {
 
 
 
+async function logMessageToSlack(user, issue,notes) {
+	let message = "_Alert_\n*User:* <@"+user+">\n*Issue:* " + issue + "\n*Notes:* " + notes;
+	try {
+		const slackMessage = {
+			...{
+				channel: logchannel,
+				text: message,
+			},
+		};
+		await webClient.chat.postMessage(slackMessage);
+	}
+	catch (e) {
+		console.log(e);
+		console.log("Issue sending log message!!!" + message);
+	}
+}
+
+
 
 
 
@@ -1735,6 +1761,44 @@ async function getLocalHour(timezone) {
 	}
 }
 
+//function to get the last time a user submitted. Log if haven't submitted in 7 days
+async function checkLastSubmisison(userID, currentDate) {
+	try {
+		let lastSubmissionQuery= {
+			text: "SELECT * FROM projectsurvey WHERE user_id=$1 ORDER BY id DESC Limit 1",
+			values: [userID],
+		};
+		let lastSubmissionQueryResult = await sendQuery(lastSubmissionQuery);
+		//if they've never submitted, no reminder yet
+		if(lastSubmissionQueryResult.rowCount) {
+			let lastDateSubmitted = lastSubmissionQueryResult.rows[0].posteddate;
+			lastDateSubmitted = lastDateSubmitted.substring(0,10);
+			lastDateSubmitted = new Date(lastDateSubmitted);
+			currentDate = new Date(currentDate);
+			currentDate.setDate(currentDate.getDate()+7)
+			if(currentDate<lastDateSubmitted) {
+				await logMessageToSlack(userID, "Has not submitted a survey in at least 7 days","Please ping them to submit a survey. Otherwise, have them updated to inactive.")
+			}
+		}
+	}	catch (e) {
+		console.log(e);
+		console.log("Unable to check last submission for user " + userID);
+	}
+ }
+
+//get status to see if OOO
+async function getUserStatus(userID) {
+	let userInfo = await webClient.users.info({ user: userID });
+	let statusEmoji = userInfo.user.profile.status_emoji;
+	let statusText = userInfo.user.profile.status_text.toString();
+	if(statusEmoji == ":palm_tree:" || statusEmoji == ":no_entry:" || statusEmoji == ":face_with_thermometer:") {
+		if (statusText.toLowerCase().includes("sick") || statusText.toLowerCase().includes("vacation") || statusText.toLowerCase().includes("office")) {
+			return false;
+		}
+	}
+	return true;
+}
+
 async function userTimeZone(timezone) {
 	let checkTime = await getLocalHour(timezone);
 	if(checkTime) {
@@ -1748,20 +1812,38 @@ async function userTimeZone(timezone) {
 		let currentDate = new Date(newDate.toLocaleString('en-US',{timeZone:timezone}))
 		currentDate = currentDate.getFullYear()+ '-' + String(currentDate.getMonth() + 1 ).padStart(2,'0') + '-' + String(currentDate.getDate()).padStart(2,'0');
 		for (let j = 0; j < usersInTimeZoneQueryResult.rows.length; j++) {
-			let userID = [{ user_id: usersInTimeZoneQueryResult.rows[j].user_id }];
-			let oooStartDate = usersInTimeZoneQueryResult.rows[j].start_outofoffice;
-			let oooEndDate = usersInTimeZoneQueryResult.rows[j].end_outofoffice;
-			let cantSend = false; 
+			let user = usersInTimeZoneQueryResult.rows[j].user_id
+			let userID = [{ user_id: user }];
+			await checkLastSubmisison(user, currentDate);
+
+			// ooo 
+			let oooStartDate = user.start_outofoffice;
+			let oooEndDate = user.end_outofoffice;
+			let cantSend = false;
+			// seeing if current date is between the current ooo days
 			if (oooStartDate != null && oooEndDate != null) {
 				oooStartDate = oooStartDate.getFullYear()+ '-' + String(oooStartDate.getMonth() + 1 ).padStart(2,'0') + '-' + String(oooStartDate.getDate()).padStart(2,'0');
 				oooEndDate = oooEndDate.getFullYear()+ '-' + String(oooEndDate.getMonth() + 1 ).padStart(2,'0') + '-' + String(oooEndDate.getDate()).padStart(2,'0');
 				cantSend = currentDate >= oooStartDate && currentDate <= oooEndDate;
 			}
 			if (cantSend) {
-				console.log(usersInTimeZoneQueryResult.rows[j].user_id + " is ooo, not sending survey");
+				console.log(user + " is ooo, not sending survey");
 			}
+			//now check for ooo emoji
 			else {
-				await sendSurvey(userID);
+				try {
+					let send = await getUserStatus(user);
+					if (send) { 
+						await sendSurvey(userID);
+					}
+					else {
+						console.log(user + " is ooo per their status, not sending survey");
+					}
+				} catch (e) {
+					console.log(e);
+					console.log("Unable to read " + user + " status, sending notification");
+					await sendSurvey(userID);
+				}
 			}
 		}
 	}
@@ -1822,8 +1904,14 @@ const startServer = async () => {
 		try {
 			let checkProjectQuery = "SELECT EXISTS(SELECT 1 FROM projects WHERE active='true')";
 			let checkProjectQueryResult = await sendQuery(checkProjectQuery);
-			console.log("DBConnection success, started Project Health Checkup.")
-			break;
+			if(checkProjectQueryResult.rowCount) {
+				console.log("DBConnection success, started Project Health Checkup.")
+				break;
+			}
+			else {
+				throw 'Could not connect to db!'
+			}
+			
 		} catch (e) {
 			console.log("Error: " + JSON.stringify(e));
 			retries -= 1;
@@ -1833,6 +1921,7 @@ const startServer = async () => {
 			}
 			else { 
 				console.log("exiting, unable to connect to db")
+				await logMessageToSlack(botchannel, "Could not restart the slack bot","Check the database!")
 				process.exit(1);
 			}
 		}
